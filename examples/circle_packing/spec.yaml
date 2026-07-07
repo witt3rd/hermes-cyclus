@@ -1,6 +1,5 @@
 kind: MetricOptimizationKind
 name: circle_packing
-version: "1.0"
 level: L1
 direction: higher_is_better
 metric: combined_score

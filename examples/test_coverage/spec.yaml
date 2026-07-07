@@ -1,17 +1,16 @@
 kind: MetricOptimizationKind
 name: test_coverage
-version: "1.0"
 level: L1
 direction: higher_is_better
 metric: coverage_percent
-baseline: 77.93        # measured 2026-07-07
+baseline: 77.93
 terminal:
-  target_score: 90.0     # 90% line coverage
+  target_score: 90.0
   max_iterations: 50
   plateau_count: 8
 evaluate: |
-  cd ~/src/witt3rd/cyclus && \
-    uv run pytest tests/ --cov=. --cov-report=json -q 2>/dev/null && \
+  cd examples/test_coverage/../.. && \
+    PYTHONPATH=. uv run pytest tests/ --cov=. --cov-report=json -q 2>/dev/null && \
     python3 -c "
   import json
   data = json.load(open('coverage.json'))
