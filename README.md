@@ -53,6 +53,11 @@ hermes cron create "0 9 * * 1-5" --skill cyclus-ralph --workdir "$PWD" \
 - How do I run my first loop, step by step?
 - What is `STATE.md` and why does the loop need it?
 
+**Building loops that work?** Read [`docs/ldd.md`](docs/ldd.md) — Loop-Driven
+Development. Why the discipline matters, the six-step cycle (RECOGNIZE →
+SPECIFY → DECOMPOSE → DECLARE → DISPATCH → INTERPRET), and why a timeout
+means decompose smaller, never bypass.
+
 ---
 
 ## Loop kinds
@@ -124,25 +129,10 @@ execution via [Saturate](https://github.com/witt3rd/saturate).
 
 ## Prior art and influences
 
-**[loop-engineering](https://github.com/cobusgreyling/loop-engineering)** — Cobus Greyling.
-The canonical reference implementation: 7 named patterns, starters for 8 tools
-(Hermes is first-class), npm toolchain, anti-patterns catalog, failure modes
-catalog, and multi-loop coordination docs. The L1/L2/L3 maturity model,
-loop budget pattern, kill switch convention, and `--context-from` chaining
-all trace here.
-
-**[Loop Engineering (essay)](https://addyosmani.com/blog/loop-engineering/)** — Addy Osmani
-(Director of Engineering, Google DeepMind). Independent convergence on the same
-five-primitive architecture Cyclus implements. *"Build it like someone who intends
-to stay the engineer, not just the person who presses go."*
-Full annotated copy: [`docs/AddyOsmani_com_-_Loop_Engineering.md`](docs/AddyOsmani_com_-_Loop_Engineering.md).
-
-**[Autoloop](https://github.com/githubnext/autoloop)** — GitHub Next. The example
-programs in [`examples/`](examples/) are adapted from Autoloop's use cases.
-Autoloop runs sequentially; Cyclus + Saturate makes the population concurrent.
-
-**[Karpathy's autoresearch](https://github.com/karpathy/autoresearch)** — the
-`MetricOptimizationKind` loop kind traces directly to Karpathy's formulation.
+See [`docs/resources/`](docs/resources/) for annotated copies of the key
+references, including Greyling's loop-engineering patterns, Osmani's essay,
+and a full transcript of Karpathy's *Skill Issue* talk. The
+[`docs/resources/README.md`](docs/resources/README.md) has full citations.
 
 ## License
 
