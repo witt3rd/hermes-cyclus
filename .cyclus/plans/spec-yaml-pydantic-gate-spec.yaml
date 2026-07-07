@@ -1,0 +1,18 @@
+kind: TaskExecutionKind
+name: spec-yaml-pydantic-gate
+level: L1
+
+terminal:
+  max_iterations: 25
+
+target_files:
+  - pyproject.toml
+  - cyclus/specs.py
+  - tests/test_spec_validation.py
+  - examples/function_minimization/spec.yaml
+  - examples/function_minimization/README.md
+  - examples/circle_packing/spec.yaml
+  - examples/circle_packing/README.md
+  - examples/test_coverage/spec.yaml
+  - examples/test_coverage/README.md
+  - skills/cyclus-ralph/SKILL.md
