@@ -56,7 +56,7 @@ Before designing the loop, understand the work:
 
 ### Phase 1: Design loop (≤3 rounds)
 
-**Round 1 — Sequential: Planner → Architect → Critic**
+**Round 1 — Sequential: Planner → Architect → Critic → DRI**
 
 **Step 1 — Loop Planner**
 
@@ -111,27 +111,35 @@ delegate_task(
 )
 ```
 
-**Step 4 — Consensus check**
+**Step 4 — DRI review**
 
-- All three APPROVE → consensus reached, go to Phase 2
-- Any REQUEST_CHANGES → collect feedback with IDs (A1/A2/C1/C2), go to Round 2
-- Any REJECT → surface to user, ask whether to continue
+Present the round output (Planner spec + task list, Architect findings, Critic
+findings) to the DRI — the human or agent who seeded the goal. The DRI is the
+only participant who knows whether the plan still serves what was actually intended.
 
-**Round 2+ — Planner revises; Architect + Critic re-review in parallel**
+Ask the DRI:
+- Does this plan still serve the original goal?
+- Are the trade-offs acceptable?
+- Any corrections or redirections before proceeding?
 
-Architect and Critic are independent in re-review — batch them:
+DRI verdict:
+- **APPROVE** — plan is aligned with intent, proceed to consensus check
+- **REQUEST_CHANGES** — specific redirections (these take priority over Architect/Critic
+  in the next round — the DRI's intent governs)
+- **REJECT** — fundamental misalignment; restart with clarified goal
 
-```
-delegate_task(tasks=[
-    {
-        "goal": "Re-review revised loop design:\n{revised_design}\n\nPrior concerns: {architect_concerns}",
-        "context": "## Role\n\n{architect_prompt}\n\n## Context\n\n{gathered_context}"
-    },
-    {
-        "goal": "Re-check revised loop design for anti-patterns:\n{revised_design}\n\nPrior concerns: {critic_concerns}",
-        "context": "## Role\n\n{critic_prompt}\n\n## Context\n\n{gathered_context}"
-    }
-])
+**Step 5 — Consensus check**
+
+All four roles must APPROVE:
+- If ALL four (Planner, Architect, Critic, DRI) APPROVE → consensus reached, go to Phase 2
+- If any is REQUEST_CHANGES → collect all feedback, proceed to Round 2
+- If any is REJECT → surface to DRI, ask whether to continue with revised goal
+
+**Round 2+ — Planner revises; Architect + Critic re-review in parallel; DRI re-reviews last**
+
+DRI re-review always happens after Architect + Critic, since the DRI's judgment
+depends on seeing the resolved technical findings first. In Round 2+, DRI input
+is the final gate before consensus.
 ```
 
 ### Phase 2: Write output
@@ -179,13 +187,14 @@ Report to the user:
 Each role returns one of:
 
 - **APPROVE** — design is sound, proceed
-- **REQUEST_CHANGES** — specific concerns (labeled A1/C1 etc.), fixable in next round
-- **REJECT** — fundamental problem, cannot proceed without user input
+- **REQUEST_CHANGES** — specific concerns (labeled A1/C1/D1 etc.), fixable in next round
+- **REJECT** — fundamental problem, cannot proceed without DRI input
 
-Consensus = all three APPROVE in the same round.
+Consensus = all four roles (Planner, Architect, Critic, DRI) APPROVE in the same round.
 
-If no consensus after 3 rounds: write the output with caveats, surface the
-open disagreements to the user. Do not block indefinitely.
+**DRI's verdict takes priority.** If Architect and Critic both APPROVE but DRI
+REQUEST_CHANGES, the loop continues. The DRI is the only one who knows whether
+the plan serves the original intent.
 
 ---
 

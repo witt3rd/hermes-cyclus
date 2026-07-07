@@ -183,20 +183,27 @@ regardless of whether the immediate task succeeded.
 ## The meta-loop
 
 `cyclus-loop-design` is the skill that produces well-formed loop specs. It is
-itself a `ConsensusKind` loop:
+itself a `ConsensusKind` loop with four roles:
 
 - **Planner** proposes the loop kind, spec fields, decomposed tasks
 - **Architect** stress-tests the decomposition — are tasks budget-sized? are
-  terminal conditions verifiable? is the metric meaningful?
-- **Critic** checks for anti-patterns — L3 before L1 established, no plateau
+  terminal conditions verifiable?
+- **Critic** checks for LDD anti-patterns — L3 before L1, no plateau
   detection, eval command that modifies repo state
+- **DRI** (Directly Responsible Individual) — the human or agent who seeded
+  the goal. The only participant who knows whether the plan still serves what
+  was actually intended. DRI verdict takes priority: Architect and Critic can
+  both APPROVE, but if DRI REQUEST_CHANGES, the loop continues.
 
-The Planner/Architect/Critic cycle runs until all three approve the spec. The
-output is a validated `spec.yaml` that the planning gate will accept. You
-cannot bypass this cycle by writing a spec directly — the gate enforces it.
+Stopping condition: all four roles APPROVE in the same round.
 
-This is the recursion: **the tool that enforces loop discipline is itself a
-loop.** LDD all the way down.
+**The DRI is not optional.** This is what I got wrong in the first run of
+`cyclus-loop-design` this morning — I applied the Architect's revisions
+and declared consensus without bringing the output back to Donald (the DRI).
+That's wrong. The DRI must review every round's output and sign off before
+consensus is valid. Without the DRI, "consensus" is just the three advisor
+roles agreeing with each other — which says nothing about whether the plan
+serves the actual goal.
 
 ---
 
