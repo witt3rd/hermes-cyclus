@@ -242,14 +242,9 @@ def claim(
             return ClaimResult(status="not_found", item=None)
         data["status"] = "RUNNING"
         data["last_heartbeat"] = now
-        # Write updated content to a unique tmp, then atomically rename tmp→active.
-        # The pending file stays until we unlink it — the race window is
-        # pending.exists() → os.rename(tmp, active). Both callers may pass the
-        # exists() check, but os.rename(tmp, active) does NOT clobber an existing
-        # file on Linux (EEXIST/ENOTEMPTY for directories; for files it replaces).
-        # The true mutual exclusion comes from trying to unlink pending after the
-        # rename — only one caller can unlink it; the other finds it gone.
-        # Actually: use rename(pending, active) directly as the atomic gate.
+        # os.rename(pending, active) is the atomic claim gate — POSIX guarantees
+        # rename is atomic within the same filesystem. If another worker claimed
+        # first, pending is gone and rename raises FileNotFoundError.
         try:
             os.rename(pending, active)
         except (FileNotFoundError, OSError):
@@ -425,6 +420,8 @@ def status(mode: str, instance_id: str) -> dict | None:
 
 def read_state(mode: str, instance_id: str) -> dict:
     """Read the state file for a work item. Returns {} if not yet written."""
+    if not _MODE_RE.match(mode):
+        raise ValueError(f"Invalid mode name: {mode!r}")
     slug = _slugify_instance(instance_id)
     root = _queue_root()
     state_path = root / "state" / f"{mode}--{slug}" / "state.json"
@@ -435,6 +432,8 @@ def read_state(mode: str, instance_id: str) -> dict:
 
 def record_turn(mode: str, instance_id: str, turn: dict) -> None:
     """Append a turn record to the turns.jsonl file."""
+    if not _MODE_RE.match(mode):
+        raise ValueError(f"Invalid mode name: {mode!r}")
     slug = _slugify_instance(instance_id)
     root = _queue_root()
     turns_path = root / "state" / f"{mode}--{slug}" / "turns.jsonl"
@@ -445,6 +444,8 @@ def record_turn(mode: str, instance_id: str, turn: dict) -> None:
 
 def turn_history(mode: str, instance_id: str) -> list[dict]:
     """Return all recorded turns for a work item."""
+    if not _MODE_RE.match(mode):
+        raise ValueError(f"Invalid mode name: {mode!r}")
     slug = _slugify_instance(instance_id)
     root = _queue_root()
     turns_path = root / "state" / f"{mode}--{slug}" / "turns.jsonl"

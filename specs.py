@@ -2,7 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar, Literal
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TerminalConditions(BaseModel):
@@ -15,7 +15,7 @@ class LoopSpec(BaseModel):
     kind: str
     name: str
     level: Literal['L1', 'L2', 'L3'] = 'L1'
-    terminal: TerminalConditions = TerminalConditions()
+    terminal: TerminalConditions = Field(default_factory=TerminalConditions)
 
 
 class MetricOptimizationSpec(LoopSpec):
@@ -24,12 +24,12 @@ class MetricOptimizationSpec(LoopSpec):
     direction: Literal['higher_is_better', 'lower_is_better']
     baseline: float | None = None
     evaluate: str | None = None
-    target_files: list[str] = []
+    target_files: list[str] = Field(default_factory=list)
 
 
 class TaskExecutionSpec(LoopSpec):
     kind: Literal['TaskExecutionKind'] = 'TaskExecutionKind'
-    target_files: list[str] = []
+    target_files: list[str] = Field(default_factory=list)
 
 
 class ConsensusSpec(LoopSpec):

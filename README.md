@@ -87,7 +87,7 @@ on Azure Files or shared mounts disable Kanban. Cyclus Tier 1 uses atomic
 
 ## Queue interface
 
-Seven core operations plus `dispatch` for the push model:
+Eight operations — seven core plus `dispatch` for the push model:
 
 ```
 post(mode, instance_id, kind, name, ...)  →  submit a work item
