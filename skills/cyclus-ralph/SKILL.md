@@ -111,6 +111,19 @@ write `phase="blocked"` via `write_state`, release, report "Max iterations reach
 
 ### Step 2: Planning Gate
 
+**Step 2 (pre-check): Validate spec.yaml if present**
+
+Before checking for plan files, look for a spec.yaml at:
+- `.cyclus/plans/{instance_id}-spec.yaml`, OR
+- A path recorded in the work item's state
+
+If found:
+1. Run: `python -c "from cyclus.specs import load_spec; load_spec('{path}')"`
+   (via terminal tool or cyclus_evidence with a single command)
+2. If it exits nonzero (ValidationError or ValueError): **halt immediately.**
+   Report the exact error to the user. Do NOT proceed to plan parsing.
+3. If it exits 0 or no spec.yaml is found: continue to plan source checks below.
+
 Ralph MUST NOT execute without a plan. Check sources in order:
 
 1. `cyclus_queue(action="status", mode="ralph", instance_id="{instance_id}")` — if tasks are
@@ -292,6 +305,7 @@ Exit cleanly. The caller re-invokes for the next iteration.
 - **Feed learnings forward.** Include `completed_task_learnings` in every executor delegation.
 - **Role prompts must be loaded via skill_view before delegating — not injected automatically in v18.** Use `skill_view(name="cyclus-ralph", file_path="references/role-{role}.md")`. If `skill_view` returns empty, abort the delegation — a role-less subagent produces garbage results. Available roles: executor, verifier, architect.
 - **Call release() at clean exit so the next invocation can claim immediately.** Without `release()`, the next `claim()` waits up to 300 seconds (heartbeat timeout) before reclaiming. On crash, heartbeat-based reclaim handles recovery automatically — no manual unlock needed.
+- **Spec gate fires before plan parsing.** If `spec.yaml` is present and `load_spec()` raises, stop. A malformed spec will corrupt every subsequent iteration; fail loudly at the gate rather than silently producing wrong output.
 
 ## Sentinel Convention
 
