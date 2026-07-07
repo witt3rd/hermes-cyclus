@@ -63,6 +63,25 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design: the loop taxonomy,
 typed FP-style interfaces, the OMH→Saturate handoff contract, and the forward arc
 toward distributed loop execution.
 
+## Prior art and influences
+
+**[Loop Engineering](https://addyosmani.com/blog/loop-engineering/)** — Addy Osmani
+(Director of Engineering, Google DeepMind). Published 2026. Osmani independently
+maps the same five-primitive loop architecture that Cyclus implements: automations,
+worktrees, skills, plugins/connectors, and sub-agents. His framing —
+*"build it like someone who intends to stay the engineer, not just the person who
+presses go"* — is a load-bearing principle for Cyclus's design. Full annotated copy
+in [`docs/AddyOsmani_com_-_Loop_Engineering.md`](docs/AddyOsmani_com_-_Loop_Engineering.md).
+
+**[Autoloop](https://github.com/githubnext/autoloop)** — GitHub Next. The example
+programs in [`examples/`](examples/) are adapted from Autoloop's use cases
+(function minimization, circle packing, autoresearch). Autoloop runs sequentially
+on GitHub Agentic Workflows; Cyclus + Saturate makes the population concurrent.
+
+**[Karpathy's autoresearch](https://github.com/karpathy/autoresearch)** — the
+`MetricOptimizationKind` loop kind (run until a metric improves) traces directly
+to Karpathy's formulation. The `examples/autoresearch/` program is based on it.
+
 ## License
 
 MIT — see [`LICENSE`](LICENSE).
