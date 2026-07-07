@@ -67,6 +67,16 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design: the loop taxonomy,
 typed FP-style interfaces, the OMH→Saturate handoff contract, and the forward arc
 toward distributed loop execution.
 
+## Getting started
+
+New here? **[`docs/tutorial.md`](docs/tutorial.md)** answers the core questions:
+
+- What is `hermes cron` for, and why does it matter?
+- What is the difference between in-session work and a loop?
+- How do L1/L2/L3 maturity levels work?
+- How do I run my first loop?
+- What is `STATE.md` and why does the loop need it?
+
 ## Prior art and influences
 
 **[loop-engineering](https://github.com/cobusgreyling/loop-engineering)** — Cobus Greyling.
