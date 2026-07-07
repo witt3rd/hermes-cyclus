@@ -65,13 +65,20 @@ toward distributed loop execution.
 
 ## Prior art and influences
 
-**[Loop Engineering](https://addyosmani.com/blog/loop-engineering/)** — Addy Osmani
-(Director of Engineering, Google DeepMind). Published 2026. Osmani independently
-maps the same five-primitive loop architecture that Cyclus implements: automations,
-worktrees, skills, plugins/connectors, and sub-agents. His framing —
+**[Loop Engineering](https://cobusgreyling.substack.com/p/loop-engineering)** — Cobus Greyling.
+The canonical reference implementation: 7 named patterns, starters for 8 tools
+(including Hermes), an npm toolchain (`loop-init`, `loop-audit`, `loop-cost`,
+`loop-worktree`), anti-patterns catalog, failure modes catalog, and multi-loop
+coordination docs. Hermes is a first-class citizen in their primitives matrix.
+The L1/L2/L3 maturity model, loop budget concept, and kill switch pattern all
+trace here. Repository: [`cobusgreyling/loop-engineering`](https://github.com/cobusgreyling/loop-engineering).
+
+**[Loop Engineering (essay)](https://addyosmani.com/blog/loop-engineering/)** — Addy Osmani
+(Director of Engineering, Google DeepMind). Independent convergence on the same
+five-primitive architecture Cyclus implements. His framing —
 *"build it like someone who intends to stay the engineer, not just the person who
-presses go"* — is a load-bearing principle for Cyclus's design. Full annotated copy
-in [`docs/AddyOsmani_com_-_Loop_Engineering.md`](docs/AddyOsmani_com_-_Loop_Engineering.md).
+presses go"* — is a load-bearing design principle. Full annotated copy in
+[`docs/AddyOsmani_com_-_Loop_Engineering.md`](docs/AddyOsmani_com_-_Loop_Engineering.md).
 
 **[Autoloop](https://github.com/githubnext/autoloop)** — GitHub Next. The example
 programs in [`examples/`](examples/) are adapted from Autoloop's use cases
