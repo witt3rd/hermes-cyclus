@@ -1,0 +1,29 @@
+# Cyclus Loop Spec Template
+
+# Required fields (all loop kinds)
+kind: TaskExecutionKind        # TaskExecutionKind | ConsensusKind | MetricOptimizationKind
+                               # InformationSeekingKind | ClarificationKind | BatchKind
+name: my-loop                  # slug — used as instance_id in cyclus-ralph
+level: L1                      # ALWAYS L1 on first design. Earn L2/L3 later.
+
+terminal:
+  max_iterations: 50           # Required — no open-ended loops
+  plateau_count: 5             # Required for MetricOptimizationKind; optional but recommended otherwise
+  target_score: null           # Optional — stop when score exceeds this
+
+# MetricOptimizationKind fields (required when kind = MetricOptimizationKind)
+metric: combined_score         # JSON field from eval output
+direction: higher_is_better   # higher_is_better | lower_is_better
+baseline: 0.0                  # Run the eval before dispatch. Required.
+evaluate: |                    # Shell command. MUST be read-only (no git, no file writes).
+  cd examples/my_example && python3 code/evaluator.py
+
+# TaskExecutionKind fields
+target_files:                  # Files the loop may modify. Workers may only touch these.
+  - src/queue.py
+  - tests/test_queue.py
+
+# Optional budget fields (see docs/ldd.md — issue #3 for full budget spec)
+# budget:
+#   max_tokens_per_iteration: 50000
+#   kill_switch: loop-pause-all

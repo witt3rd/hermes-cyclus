@@ -1,17 +1,3 @@
----
-kind: MetricOptimizationKind
-name: function_minimization
-version: "1.0"
-level: L1
-direction: higher_is_better
-metric: combined_score
-baseline: 1.42         # naive random search on this hardware (2026-07-07); Autoloop docs cite 0.56
-terminal:
-  target_score: 1.3        # well above the 1.2x multiplier ceiling
-  max_iterations: 100
-  plateau_count: 10        # stall detection: 10 consecutive rejections
----
-
 # Function Minimization
 
 Improve `code/initial_program.py` to reliably find the global minimum of:

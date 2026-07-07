@@ -1,0 +1,16 @@
+kind: MetricOptimizationKind
+name: circle_packing
+level: L1
+direction: higher_is_better
+metric: combined_score
+baseline: 0.0
+terminal:
+  target_score: 1.0
+  max_iterations: 200
+  plateau_count: 15
+evaluate: |
+  cd examples/circle_packing && \
+    pip install -q numpy scipy matplotlib && \
+    python3 code/evaluator.py
+target_files:
+  - examples/circle_packing/code/initial_program.py

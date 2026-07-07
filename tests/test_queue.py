@@ -1,17 +1,17 @@
 """
-Unit tests for plugins/omh/queue.py — all six operations plus invariants.
+Unit tests for queue.py — all six operations plus invariants.
 
 Tests run without a live Hermes session. All I/O is isolated to tmp_path via
 a monkeypatched cyclus_config cache that sets project_root to tmp_path.
 
-Convention: each test gets a fresh DB in its own tmp_path subdirectory via
+Convention: each test gets a fresh queue in its own tmp_path subdirectory via
 the `queue_env` fixture, so no test can leak state to another.
 """
 
 from __future__ import annotations
 
 import json
-import sqlite3
+import threading
 import time
 from pathlib import Path
 
@@ -24,9 +24,14 @@ from cyclus.queue import (
     cancel,
     claim,
     complete,
+    counts,
+    get,
     post,
+    read_state,
+    record_turn,
     release,
     status,
+    turn_history,
     write_state,
 )
 
@@ -43,13 +48,11 @@ def queue_env(tmp_path, monkeypatch):
     Also resets the cyclus_config cache before and after each test so config
     mutations from one test cannot leak into the next.
     """
-    # Point project_root at the tmp_path for this test.
     cyclus_config_module._config_cache = {
         "project_root": str(tmp_path),
-        "omh_backend": "sqlite",
+        "omh_backend": "files",
     }
     yield tmp_path
-    # Clean up — next test gets a fresh cache.
     cyclus_config_module._config_cache = None
 
 
@@ -71,35 +74,25 @@ class TestPost:
         task_id_2 = post(mode="ralph", instance_id="plan-b", kind="TaskExecutionKind", name="B")
         assert task_id_1 != task_id_2
 
-    def test_post_creates_db_at_correct_path(self, queue_env):
-        """The queue DB is created at <project_root>/.omh/queue.db."""
+    def test_post_creates_queue_dirs(self, queue_env):
+        """The queue directories are created at <project_root>/.cyclus/queue/."""
         post(mode="ralph", instance_id="plan-x", kind="TaskExecutionKind", name="X")
-        db_path = queue_env / ".omh" / "queue.db"
-        assert db_path.exists(), f"Expected DB at {db_path}"
+        for sub in ("pending", "active", "done"):
+            assert (queue_env / ".cyclus" / "queue" / sub).exists()
 
     def test_post_sets_spec_path_to_none(self, queue_env):
-        """spec_path is NULL in v18.0.0 (Saturate gap acknowledged in design doc)."""
+        """spec_path is None in v18.0.0 (Saturate gap acknowledged in design doc)."""
         post(mode="ralph", instance_id="plan-null-spec", kind="TaskExecutionKind", name="NS")
-        db_path = queue_env / ".omh" / "queue.db"
-        conn = sqlite3.connect(str(db_path))
-        row = conn.execute(
-            "SELECT spec_path FROM omh_work_items WHERE mode='ralph' AND instance_id='plan-null-spec'"
-        ).fetchone()
-        conn.close()
-        assert row is not None
-        assert row[0] is None, "spec_path should be NULL in v18.0.0"
+        info = status(mode="ralph", instance_id="plan-null-spec")
+        assert info is not None
+        assert info["spec_path"] is None
 
-    def test_post_schema_has_cancel_requested_column(self, queue_env):
-        """The cancel_requested column must exist with default 0."""
+    def test_post_schema_has_cancel_requested_field(self, queue_env):
+        """The cancel_requested field must exist with default 0."""
         post(mode="ralph", instance_id="plan-cr", kind="TaskExecutionKind", name="CR")
-        db_path = queue_env / ".omh" / "queue.db"
-        conn = sqlite3.connect(str(db_path))
-        row = conn.execute(
-            "SELECT cancel_requested FROM omh_work_items WHERE mode='ralph' AND instance_id='plan-cr'"
-        ).fetchone()
-        conn.close()
-        assert row is not None
-        assert row[0] == 0, "cancel_requested must default to 0"
+        info = status(mode="ralph", instance_id="plan-cr")
+        assert info is not None
+        assert info["cancel_requested"] == 0
 
 
 class TestClaim:
@@ -116,10 +109,8 @@ class TestClaim:
     def test_claim_returns_running_for_held_item(self, queue_env):
         """claim() on an item in RUNNING with a fresh heartbeat returns status='running'."""
         post(mode="ralph", instance_id="held-item", kind="TaskExecutionKind", name="Held")
-        # First claim sets it to RUNNING with a fresh heartbeat
         first = claim(mode="ralph", instance_id="held-item")
         assert first.status == "claimed"
-        # Second claim (simulates another session) should see it as running / held
         second = claim(mode="ralph", instance_id="held-item", heartbeat_timeout_seconds=300)
         assert second.status == "running"
         assert second.item is None
@@ -133,27 +124,20 @@ class TestClaim:
     def test_claim_reclaims_timed_out(self, queue_env):
         """claim() reclaims a RUNNING item whose heartbeat has exceeded the timeout."""
         post(mode="ralph", instance_id="stale-item", kind="TaskExecutionKind", name="Stale")
-        # Claim to put it in RUNNING
         first = claim(mode="ralph", instance_id="stale-item")
         assert first.status == "claimed"
 
-        # Artificially age the last_heartbeat far into the past (2000 seconds ago)
-        old_hb = "2000-01-01T00:00:00+00:00"
-        db_path = queue_env / ".omh" / "queue.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.execute(
-            "UPDATE omh_work_items SET last_heartbeat = ? WHERE mode = 'ralph' AND instance_id = 'stale-item'",
-            (old_hb,),
-        )
-        conn.commit()
-        conn.close()
+        # Force the active JSON to have a very old heartbeat
+        active_path = queue_env / ".cyclus" / "queue" / "active" / "ralph--stale-item.json"
+        data = json.loads(active_path.read_text())
+        data["last_heartbeat"] = "2000-01-01T00:00:00+00:00"
+        active_path.write_text(json.dumps(data))
 
-        # Now claim with a 1-second timeout — the 2000-year-old heartbeat is definitely stale
         second = claim(mode="ralph", instance_id="stale-item", heartbeat_timeout_seconds=1)
         assert second.status == "claimed", "Timed-out RUNNING item should be reclaimed"
         assert second.item is not None
         assert second.item["status"] == "RUNNING"
-        assert second.item["last_heartbeat"] != old_hb  # heartbeat was refreshed
+        assert second.item["last_heartbeat"] != "2000-01-01T00:00:00+00:00"
 
 
 class TestRelease:
@@ -163,30 +147,22 @@ class TestRelease:
         first = claim(mode="ralph", instance_id="release-me")
         assert first.status == "claimed"
 
-        # Without release(), a second claim() with 300s timeout would return "running".
-        # After release(), the item is PENDING again and claim() returns "claimed".
         release(mode="ralph", instance_id="release-me")
 
-        # Verify DB state is PENDING with NULL heartbeat
-        db_path = queue_env / ".omh" / "queue.db"
-        conn = sqlite3.connect(str(db_path))
-        row = conn.execute(
-            "SELECT status, last_heartbeat FROM omh_work_items WHERE mode='ralph' AND instance_id='release-me'"
-        ).fetchone()
-        conn.close()
-        assert row[0] == "PENDING"
-        assert row[1] is None
+        # After release(), item is PENDING — verify via status()
+        info = status(mode="ralph", instance_id="release-me")
+        assert info is not None
+        assert info["status"] == "PENDING"
+        assert info["last_heartbeat"] is None
 
-        # A new claim should succeed immediately (no 300-second wait)
+        # A new claim should succeed immediately
         second = claim(mode="ralph", instance_id="release-me", heartbeat_timeout_seconds=300)
         assert second.status == "claimed"
 
     def test_release_noop_on_non_running(self, queue_env):
         """release() on a PENDING item is a safe no-op (idempotent)."""
         post(mode="ralph", instance_id="noop-release", kind="TaskExecutionKind", name="NR")
-        # Should not raise
         release(mode="ralph", instance_id="noop-release")
-        # Item should still be PENDING
         info = status(mode="ralph", instance_id="noop-release")
         assert info is not None
         assert info["status"] == "PENDING"
@@ -197,16 +173,13 @@ class TestCancel:
         """cancel() sets cancel_requested=1; status() returns it."""
         post(mode="ralph", instance_id="cancel-me", kind="TaskExecutionKind", name="Cancel")
         claim(mode="ralph", instance_id="cancel-me")
-
         cancel(mode="ralph", instance_id="cancel-me", reason="test request")
-
         info = status(mode="ralph", instance_id="cancel-me")
         assert info is not None
         assert info["cancel_requested"] == 1
 
     def test_cancel_noop_on_missing_item(self, queue_env):
         """cancel() on a non-existent item is a safe no-op (does not raise)."""
-        # Should not raise
         cancel(mode="ralph", instance_id="ghost-item", reason="test")
 
 
@@ -219,7 +192,6 @@ class TestWriteState:
         before = status(mode="ralph", instance_id="hb-test")
         hb_before = before["last_heartbeat"] if before else None
 
-        # Small sleep to ensure the timestamp advances (ISO 8601 at second resolution)
         time.sleep(1.1)
 
         write_state(mode="ralph", instance_id="hb-test", state={"task": 3, "phase": "execute"})
@@ -227,10 +199,7 @@ class TestWriteState:
         after = status(mode="ralph", instance_id="hb-test")
         assert after is not None
         hb_after = after["last_heartbeat"]
-
-        # The heartbeat must have changed (or at least be non-null)
         assert hb_after is not None
-        # If both are set and second-resolution differs, the after must be >= before
         if hb_before is not None:
             assert hb_after >= hb_before
 
@@ -242,16 +211,10 @@ class TestWriteState:
         payload = {"task_index": 7, "done": False}
         write_state(mode="ralph", instance_id="file-test", state=payload)
 
-        # Locate state_path from DB
-        db_path = queue_env / ".omh" / "queue.db"
-        conn = sqlite3.connect(str(db_path))
-        row = conn.execute(
-            "SELECT state_path FROM omh_work_items WHERE mode='ralph' AND instance_id='file-test'"
-        ).fetchone()
-        conn.close()
-        assert row is not None
-        sp = Path(row[0])
-        assert sp.exists(), f"Expected state file at {sp}"
+        info = status(mode="ralph", instance_id="file-test")
+        assert info is not None
+        sp = Path(info["state_path"])
+        assert sp.exists()
         data = json.loads(sp.read_text())
         assert data["task_index"] == 7
 
@@ -261,13 +224,7 @@ class TestComplete:
         """complete() sets status=COMPLETE, terminal_state, and completed_at."""
         post(mode="ralph", instance_id="done-item", kind="TaskExecutionKind", name="Done")
         claim(mode="ralph", instance_id="done-item")
-
-        complete(
-            mode="ralph",
-            instance_id="done-item",
-            terminal_state="PlanComplete",
-        )
-
+        complete(mode="ralph", instance_id="done-item", terminal_state="PlanComplete")
         info = status(mode="ralph", instance_id="done-item")
         assert info is not None
         assert info["status"] == "COMPLETE"
@@ -293,7 +250,6 @@ class TestComplete:
                 confirmed_by_human=False,
             )
 
-        # Item must still be in RUNNING (not completed)
         info = status(mode="deep-interview", instance_id="interview-001")
         assert info is not None
         assert info["status"] == "RUNNING"
@@ -308,15 +264,12 @@ class TestComplete:
             tags=["HUMAN_GATED"],
         )
         claim(mode="deep-interview", instance_id="interview-002")
-
-        # Should not raise
         complete(
             mode="deep-interview",
             instance_id="interview-002",
             terminal_state="SpecConfirmed",
             confirmed_by_human=True,
         )
-
         info = status(mode="deep-interview", instance_id="interview-002")
         assert info is not None
         assert info["status"] == "COMPLETE"
@@ -329,15 +282,12 @@ class TestStatus:
         post(mode="ralph", instance_id="readonly-test", kind="TaskExecutionKind", name="RO")
         claim(mode="ralph", instance_id="readonly-test")
 
-        # Read heartbeat immediately after claim
         info1 = status(mode="ralph", instance_id="readonly-test")
         assert info1 is not None
         hb1 = info1["last_heartbeat"]
 
-        # Sleep slightly to ensure any write would produce a different timestamp
         time.sleep(1.1)
 
-        # status() call — must NOT advance the heartbeat
         info2 = status(mode="ralph", instance_id="readonly-test")
         assert info2 is not None
         hb2 = info2["last_heartbeat"]
@@ -356,7 +306,6 @@ class TestStatus:
         post(mode="ralph", instance_id="cancel-status", kind="TaskExecutionKind", name="CS")
         claim(mode="ralph", instance_id="cancel-status")
         cancel(mode="ralph", instance_id="cancel-status")
-
         info = status(mode="ralph", instance_id="cancel-status")
         assert info is not None
         assert info["cancel_requested"] == 1
@@ -373,7 +322,6 @@ class TestClaimTerminalItem:
         post(mode="ralph", instance_id="already-done", kind="TaskExecutionKind", name="Done")
         claim(mode="ralph", instance_id="already-done")
         complete(mode="ralph", instance_id="already-done", terminal_state="PlanComplete")
-
         result = claim(mode="ralph", instance_id="already-done")
         assert result.status == "not_found", (
             "Completed items should be un-claimable; got status={!r}".format(result.status)
@@ -381,36 +329,113 @@ class TestClaimTerminalItem:
 
 
 # ---------------------------------------------------------------------------
-# Import check — no omh_state imports anywhere in the new module
+# Import check — no omh_state imports, no sqlite3 in queue.py
 # ---------------------------------------------------------------------------
 
 
 def test_queue_has_no_omh_state_imports():
-    """queue.py must not import from omh_state (independence invariant).
-
-    Checks for actual import statements, not docstring mentions, because the
-    docstring may legitimately reference 'omh_state.py' for context.
-    """
+    """queue.py must not import from omh_state (independence invariant)."""
     import re as _re
     queue_path = Path(__file__).parent.parent / "queue.py"
-    assert queue_path.exists(), "queue.py not found"
+    assert queue_path.exists()
     source = queue_path.read_text(encoding="utf-8")
-    # Match lines that are actual Python imports referencing omh_state
     import_lines = [
         line.strip()
         for line in source.splitlines()
         if _re.match(r"\s*(from|import)\s+.*omh_state", line)
     ]
-    assert not import_lines, (
-        f"queue.py must not import from omh_state.py — found: {import_lines}"
-    )
+    assert not import_lines, f"queue.py must not import from omh_state.py — found: {import_lines}"
 
 
 def test_queue_tool_has_no_omh_state_imports():
     """queue_tool.py must not import from omh_state."""
     tool_path = Path(__file__).parent.parent / "tools" / "queue_tool.py"
-    assert tool_path.exists(), "queue_tool.py not found"
+    assert tool_path.exists()
     source = tool_path.read_text(encoding="utf-8")
-    assert "omh_state" not in source, (
-        "queue_tool.py must not import from omh_state.py"
-    )
+    assert "omh_state" not in source
+
+
+def test_queue_has_no_sqlite3_import():
+    """queue.py must not import sqlite3 (file-based backend, no DB)."""
+    queue_path = Path(__file__).parent.parent / "queue.py"
+    source = queue_path.read_text(encoding="utf-8")
+    import_lines = [
+        line.strip()
+        for line in source.splitlines()
+        if "import sqlite3" in line
+    ]
+    assert not import_lines, f"queue.py must not import sqlite3 — found: {import_lines}"
+
+
+# ---------------------------------------------------------------------------
+# Atomic claim test — two threads, one winner
+# ---------------------------------------------------------------------------
+
+
+def test_file_queue_claim_is_atomic(queue_env):
+    """Two concurrent claim() calls on one pending item — exactly one wins."""
+    post(mode="ralph", instance_id="atomic-test", kind="TaskExecutionKind", name="Atomic")
+
+    results = []
+
+    def do_claim():
+        r = claim(mode="ralph", instance_id="atomic-test")
+        results.append(r.status)
+
+    t1 = threading.Thread(target=do_claim)
+    t2 = threading.Thread(target=do_claim)
+    t1.start(); t2.start()
+    t1.join(); t2.join()
+
+    assert len(results) == 2
+    assert results.count("claimed") == 1
+    # The loser sees the item already active (fresh heartbeat) → "running"
+    assert results.count("not_found") + results.count("running") == 1
+
+
+# ---------------------------------------------------------------------------
+# Additional operations
+# ---------------------------------------------------------------------------
+
+
+class TestReadState:
+    def test_read_state_returns_empty_before_write(self, queue_env):
+        post(mode="ralph", instance_id="rs-test", kind="TaskExecutionKind", name="RS")
+        assert read_state(mode="ralph", instance_id="rs-test") == {}
+
+    def test_read_state_after_write(self, queue_env):
+        post(mode="ralph", instance_id="rs-written", kind="TaskExecutionKind", name="RSW")
+        claim(mode="ralph", instance_id="rs-written")
+        write_state(mode="ralph", instance_id="rs-written", state={"x": 42})
+        assert read_state(mode="ralph", instance_id="rs-written") == {"x": 42}
+
+
+class TestRecordTurn:
+    def test_record_turn_appends(self, queue_env):
+        post(mode="ralph", instance_id="turn-test", kind="TaskExecutionKind", name="TT")
+        claim(mode="ralph", instance_id="turn-test")
+        record_turn(mode="ralph", instance_id="turn-test", turn={"n": 1})
+        record_turn(mode="ralph", instance_id="turn-test", turn={"n": 2})
+        history = turn_history(mode="ralph", instance_id="turn-test")
+        assert len(history) == 2
+        assert history[0]["n"] == 1
+        assert history[1]["n"] == 2
+
+
+class TestCounts:
+    def test_counts_reflects_queue_state(self, queue_env):
+        post(mode="ralph", instance_id="count-a", kind="TaskExecutionKind", name="A")
+        post(mode="ralph", instance_id="count-b", kind="TaskExecutionKind", name="B")
+        c = counts()
+        assert c["pending"] == 2
+        assert c["active"] == 0
+        claim(mode="ralph", instance_id="count-a")
+        c = counts()
+        assert c["pending"] == 1
+        assert c["active"] == 1
+
+
+class TestGet:
+    def test_get_is_alias_for_status(self, queue_env):
+        post(mode="ralph", instance_id="get-test", kind="TaskExecutionKind", name="GT")
+        assert get(mode="ralph", instance_id="get-test") == status(mode="ralph", instance_id="get-test")

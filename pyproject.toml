@@ -8,6 +8,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "pyyaml>=6.0",
+    "pydantic>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +29,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+pythonpath = [".."]
 
 [tool.ruff]
 line-length = 100

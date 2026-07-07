@@ -1,0 +1,19 @@
+kind: MetricOptimizationKind
+name: test_coverage
+level: L1
+direction: higher_is_better
+metric: coverage_percent
+baseline: 77.93
+terminal:
+  target_score: 90.0
+  max_iterations: 50
+  plateau_count: 8
+evaluate: |
+  cd examples/test_coverage/../.. && \
+    PYTHONPATH=. uv run pytest tests/ --cov=. --cov-report=json -q 2>/dev/null && \
+    python3 -c "
+  import json
+  data = json.load(open('coverage.json'))
+  pct = data['totals']['percent_covered']
+  print(json.dumps({'coverage_percent': round(pct, 2)}))
+  "

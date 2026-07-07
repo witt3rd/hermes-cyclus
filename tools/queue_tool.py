@@ -24,11 +24,11 @@ from ..queue import (
 CYCLUS_QUEUE_SCHEMA = {
     "name": "cyclus_queue",
     "description": (
-        "OMH work queue — SQLite-backed implementation of the Saturate-aligned six-operation "
-        "interface. The queue lives at .omh/queue.db relative to the project root. "
-        "Actions: post | claim | release | write_state | cancel | complete | status. "
+        "Cyclus work queue — file-based implementation of the six-operation interface. "
+        "Actions: post | claim | release | write_state | cancel | complete | status | dispatch. "
         "Skills write against this interface; the plugin routes to the configured backend "
-        "(sqlite by default, kanban or saturate when configured)."
+        "(files by default, kanban or saturate when configured). "
+        "dispatch: post if not exists, return worker context for caller to fire via delegate_task."
     ),
     "parameters": {
         "type": "object",
@@ -43,6 +43,7 @@ CYCLUS_QUEUE_SCHEMA = {
                     "cancel",
                     "complete",
                     "status",
+                    "dispatch",
                 ],
                 "description": "Operation to perform.",
             },
@@ -222,6 +223,45 @@ def cyclus_queue_handler(args: dict, **kwargs) -> str:
             case "status":
                 result_dict = status(mode=mode, instance_id=instance_id)
                 return json.dumps(result_dict if result_dict is not None else {"found": False})
+
+            case "dispatch":
+                # Push model: post if not exists, return dispatch context.
+                # For file-based backend: caller fires a worker via delegate_task.
+                # For Kanban/Saturate: posting is sufficient (backend fires automatically).
+                info = status(mode=mode, instance_id=instance_id)
+                if info is None:
+                    kind = args.get("kind", "TaskExecutionKind")
+                    name = args.get("name", instance_id)
+                    post(
+                        mode=mode,
+                        instance_id=instance_id,
+                        kind=kind,
+                        name=name,
+                        max_turns=args.get("max_turns"),
+                        tags=args.get("tags"),
+                        spawned_by=args.get("spawned_by"),
+                        depends_on=args.get("depends_on"),
+                    )
+                    info = status(mode=mode, instance_id=instance_id)
+                if info and info.get("status") not in ("PENDING", "RUNNING"):
+                    return json.dumps({
+                        "error": f"Cannot dispatch: item is already {info['status']}"
+                    })
+                return json.dumps({
+                    "dispatched": True,
+                    "mode": mode,
+                    "instance_id": instance_id,
+                    "task_id": info["task_id"] if info else None,
+                    "kind": info["kind"] if info else None,
+                    "name": info["name"] if info else None,
+                    "status": info["status"] if info else None,
+                    "state_path": info["state_path"] if info else None,
+                    "worker_note": (
+                        "File-based backend: call delegate_task with cyclus-ralph skill "
+                        "and this context to fire the worker. "
+                        "Kanban/Saturate: backend fires automatically on post."
+                    ),
+                })
 
             case _:
                 valid = "post, claim, release, write_state, cancel, complete, status"
