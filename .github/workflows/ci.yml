@@ -11,17 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: cyclus
+
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+
       - name: Install dependencies
-        working-directory: cyclus
         run: uv sync --dev
+
       - name: Run tests
-        working-directory: cyclus
-        run: |
-          # Repo root checked out into 'cyclus/' — parent dir is the import root
-          # so `from cyclus.specs import load_spec` resolves correctly
-          PYTHONPATH="${{ github.workspace }}" uv run pytest tests/ -q
+        run: uv run pytest tests/ -q
