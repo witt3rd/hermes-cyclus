@@ -81,13 +81,70 @@ each adding capability without requiring skill rewrites:
 
 | Backend | When | What it provides |
 |---------|------|-----------------|
-| **Cyclus internal queue** | Always works; zero config | Embedded SQLite (single-node); matches Saturate's schema; full lifecycle and audit trail; no Hermes dependency |
-| **Kanban** (Hermes v0.18.0) | If Hermes Kanban is enabled | Native Hermes durable board; `kanban_create/next/comment/complete` implement the four operations; HITL gates via `kanban_block` |
-| **Saturate** | When configured | Distributed Ray/Nomad fleet; multi-node; full typed loop execution at scale; the production backend |
+| **File-based** | Always works; zero config; NFS-safe | Atomic directory operations — `pending/`, `active/`, `done/` subdirs; `claim()` = `os.rename()`; no database, no WAL, no journal; works on Azure Files, NFS, any filesystem |
+| **Kanban** (Hermes v0.18.0) | If Hermes Kanban is enabled | Native Hermes durable board; `kanban_create/next/comment/complete` implement the four operations; HITL gates via `kanban_block`; visual surface on top of the same file semantics |
+| **Saturate** | When configured | Distributed fleet; PostgreSQL with `SELECT FOR UPDATE SKIP LOCKED` for concurrent workers; multi-node; the production backend for N parallel workers |
+
+**Why not SQLite for Tier 1?** SQLite WAL mode corrupts on NFS-mounted
+filesystems — the exact reason Hermes users on Azure Files or shared mounts
+disable Kanban. Since Cyclus's primary target is Hermes (which frequently runs
+on NFS-backed storage), SQLite is the wrong Tier 1 foundation. Atomic file
+renames are NFS-safe by POSIX guarantee.
 
 Cyclus detects which backend is available at runtime. The skill prose is written
 against the four-operation interface — a backend swap is a configuration change,
 not a skill rewrite.
+
+---
+
+## Hermes-Native Loop Patterns
+
+Cyclus is Hermes-native. The full loop engineering stack runs on Hermes
+primitives with no extra infrastructure:
+
+| Loop primitive | Hermes mechanism |
+|---|---|
+| Scheduling / heartbeat | `hermes cron create "0 7 * * 1-5" --skill cyclus-ralph --workdir "$PWD"` |
+| Run-until-done | Two cron jobs chained via `hermes cron edit --context-from <upstream-id>` |
+| Worktrees | `git worktree` inside the cron job; `--workdir` pins per-job cwd |
+| Skills | `SKILL.md` under `~/.hermes/skills/` or project `.hermes/skills/` |
+| Sub-agents (maker/checker) | `delegate_task(role='leaf', toolsets=[...])` |
+| State/memory | `STATE.md` in `--workdir`; `hermes memory` for cross-session facts |
+| Channel delivery | `--deliver telegram\|slack\|local` on any cron job |
+
+### The `--context-from` chain (L2 maker/checker split)
+
+```bash
+# Proposer: one cyclus-ralph turn, writes proposed diff to STATE.md
+PROPOSER=$(hermes cron create "0 7 * * 1-5" \
+  --name "cyclus-ralph proposer" --skill cyclus-ralph \
+  --workdir "$PWD" --deliver local \
+  "Run one turn. Write proposed patch as fenced diff. Update STATE.md. Do not apply." \
+  | tail -1)
+
+# Verifier: receives proposer stdout, applies patch in worktree, runs eval
+hermes cron create "5 7 * * 1-5" \
+  --name "cyclus-ralph verifier" --skill cyclus-ralph-driver \
+  --workdir "$PWD" --deliver local \
+  "Apply injected patch in isolated worktree. Run eval. Commit if improved. Update STATE.md."
+
+hermes cron edit <verifier-id> --context-from "$PROPOSER"
+```
+
+The upstream job's stdout is injected into the downstream prompt on every tick.
+No new infrastructure — this is `--context-from` doing inter-job pipeline.
+
+### L1 defaults (always start here)
+
+All `spec.md` files default to `level: L1` until trust is earned:
+
+- `--deliver local` — output stays in `~/.hermes/cron/output/`, not in any channel
+- Workers write proposed diffs to `write_state()` only — nothing touches the repo
+- Human reads `STATE.md` and local output before enabling L2
+- Kill switch: set `loop-pause-all: true` in `STATE.md` and the skill short-circuits
+
+**Anti-pattern #4 (Greyling):** L3 before L1 quality. Never auto-commit until
+the eval command, baseline score, and improvement direction are confirmed correct.
 
 ---
 

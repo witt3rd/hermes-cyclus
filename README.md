@@ -24,10 +24,14 @@ provides the deliberation patterns that produce well-specified loops worth runni
 Cyclus detects the execution backend at runtime — no code changes when you scale up:
 
 ```
-cyclus_queue   (always available, zero config)   →  embedded SQLite
-               (if omh_backend = "kanban")        →  Hermes Kanban board
-               (if SATURATE_URL is set)           →  Saturate distributed fleet
+File-based  (always available, NFS-safe, zero config)  →  atomic dir ops: pending/ active/ done/
+            (if omh_backend = "kanban")                →  Hermes Kanban board (visual surface)
+            (if SATURATE_URL is set)                   →  Saturate distributed fleet
 ```
+
+**Why not SQLite?** SQLite WAL mode corrupts on NFS — the reason Hermes users
+on Azure Files or shared mounts disable Kanban. Cyclus Tier 1 uses atomic
+`os.rename()` instead: POSIX-guaranteed NFS-safe, zero dependencies.
 
 ## Queue interface
 
@@ -65,13 +69,14 @@ toward distributed loop execution.
 
 ## Prior art and influences
 
-**[Loop Engineering](https://cobusgreyling.substack.com/p/loop-engineering)** — Cobus Greyling.
-The canonical reference implementation: 7 named patterns, starters for 8 tools
-(including Hermes), an npm toolchain (`loop-init`, `loop-audit`, `loop-cost`,
-`loop-worktree`), anti-patterns catalog, failure modes catalog, and multi-loop
-coordination docs. Hermes is a first-class citizen in their primitives matrix.
-The L1/L2/L3 maturity model, loop budget concept, and kill switch pattern all
-trace here. Repository: [`cobusgreyling/loop-engineering`](https://github.com/cobusgreyling/loop-engineering).
+**[loop-engineering](https://github.com/cobusgreyling/loop-engineering)** — Cobus Greyling.
+The canonical reference implementation of loop engineering: 7 named patterns,
+starters for 8 tools (Hermes is first-class), npm toolchain (`loop-init`,
+`loop-audit`, `loop-cost`, `loop-worktree`), anti-patterns catalog, failure
+modes catalog, and multi-loop coordination docs. The L1/L2/L3 maturity model,
+loop budget pattern, kill switch convention, and `--context-from` chaining
+pattern all trace here. The Hermes column in their primitives matrix is the
+most complete public description of Hermes as a loop engineering platform.
 
 **[Loop Engineering (essay)](https://addyosmani.com/blog/loop-engineering/)** — Addy Osmani
 (Director of Engineering, Google DeepMind). Independent convergence on the same
