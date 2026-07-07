@@ -1,0 +1,8 @@
+name: cyclus
+version: "18.0.0"
+description: "Oh My Hermes v18 — loop-kind deliberation patterns on Hermes Agent. Every skill maps to a Saturate loop kind. The OMH internal queue provides the four-operation interface with SQLite, Kanban (if enabled), or Saturate backends."
+author: Donald Thompson
+
+provides_tools:
+  - cyclus_queue
+  - cyclus_evidence

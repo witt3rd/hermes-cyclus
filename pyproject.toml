@@ -1,0 +1,36 @@
+[project]
+name = "hermes-cyclus"
+version = "18.0.0"
+description = "Loop engineering primitives for Hermes Agent — typed deliberation skills on the Saturate loop taxonomy"
+authors = [{ name = "Donald Thompson" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.entry-points."hermes_agent.plugins"]
+cyclus = "cyclus:register"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
