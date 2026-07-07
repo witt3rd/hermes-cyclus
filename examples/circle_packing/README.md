@@ -1,17 +1,3 @@
----
-kind: MetricOptimizationKind
-name: circle_packing
-version: "1.0"
-level: L1
-direction: higher_is_better
-metric: combined_score
-baseline: 0.0            # naive concentric ring layout scores near 0
-terminal:
-  target_score: 1.0      # matching AlphaEvolve's result (sum_radii = 2.635)
-  max_iterations: 200
-  plateau_count: 15
----
-
 # Circle Packing
 
 Maximize the sum of radii of 26 non-overlapping circles packed inside a unit square
