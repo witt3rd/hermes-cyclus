@@ -234,15 +234,36 @@ def claim(
 
     # Atomic claim from pending via rename
     if pending.exists():
+        # Read and update data BEFORE rename so the file is ready the instant
+        # it appears in active/ — prevents race where another thread sees the
+        # active file but reads stale/empty content.
         try:
-            os.rename(pending, active)
-        except (FileNotFoundError, OSError):
-            # Lost the race — another worker claimed it
+            data = _read_json(pending)
+        except (FileNotFoundError, json.JSONDecodeError):
             return ClaimResult(status="not_found", item=None)
-        data = _read_json(active)
         data["status"] = "RUNNING"
         data["last_heartbeat"] = now
-        _write_json(active, data)
+        # Write updated data to a temp file alongside pending, then rename both
+        # steps atomically: tmp→pending (overwrite), then pending→active.
+        # Simpler: write to active directly then rename pending away.
+        # Best NFS-safe approach: write to tmp in same dir, rename to active.
+        tmp = root / "queue" / "pending" / (name + ".tmp")
+        _write_json(tmp, data)
+        try:
+            # Rename the updated tmp to active/ (atomic destination claim)
+            os.rename(tmp, active)
+            # Remove the now-stale pending file
+            try:
+                os.unlink(pending)
+            except FileNotFoundError:
+                pass  # already gone — fine
+        except (FileNotFoundError, OSError):
+            # Lost the race
+            try:
+                os.unlink(tmp)
+            except FileNotFoundError:
+                pass
+            return ClaimResult(status="not_found", item=None)
         return ClaimResult(status="claimed", item=data)
 
     # Done or absent — not claimable
