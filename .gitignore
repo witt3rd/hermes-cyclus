@@ -14,13 +14,19 @@ build/
 # Testing
 .pytest_cache/
 .coverage
+coverage.json
 htmlcov/
 .tox/
 
 # Cyclus runtime state (project-local, not committed)
-.cyclus/queue.db
-.cyclus/state/
-.cyclus/output/
+.cyclus/queue/pending/*.json
+.cyclus/queue/active/*.json
+.cyclus/queue/done/*.json
+.cyclus/state/*/
+!.cyclus/state/.gitkeep
+
+# OMH legacy runtime state
+.omh/
 
 # IDE
 .idea/

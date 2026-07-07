@@ -2,6 +2,7 @@
 kind: MetricOptimizationKind
 name: circle_packing
 version: "1.0"
+level: L1
 direction: higher_is_better
 metric: combined_score
 baseline: 0.0            # naive concentric ring layout scores near 0

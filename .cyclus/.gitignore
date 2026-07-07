@@ -1,0 +1,6 @@
+# Track directory structure but not runtime state
+queue/pending/*.json
+queue/active/*.json
+queue/done/*.json
+state/*/
+!state/*/.gitkeep

@@ -2,9 +2,10 @@
 kind: MetricOptimizationKind
 name: test_coverage
 version: "1.0"
+level: L1
 direction: higher_is_better
 metric: coverage_percent
-baseline: 0.0            # to be updated after first run
+baseline: 77.93        # measured 2026-07-07
 terminal:
   target_score: 90.0     # 90% line coverage
   max_iterations: 50
