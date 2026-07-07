@@ -2,7 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar, Literal
 import yaml
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 
 class TerminalConditions(BaseModel):

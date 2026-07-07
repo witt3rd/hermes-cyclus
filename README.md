@@ -87,7 +87,7 @@ on Azure Files or shared mounts disable Kanban. Cyclus Tier 1 uses atomic
 
 ## Queue interface
 
-Six operations, identical to Saturate's contract:
+Seven core operations plus `dispatch` for the push model:
 
 ```
 post(mode, instance_id, kind, name, ...)  →  submit a work item
@@ -97,6 +97,7 @@ write_state(mode, instance_id, state)    →  record iteration progress + heartb
 cancel(mode, instance_id)               →  set cancel_requested sentinel
 complete(mode, instance_id, terminal)   →  mark done, attach output
 status(mode, instance_id)               →  read-only current state
+dispatch(mode, instance_id, ...)        →  post if needed, return worker context (push model)
 ```
 
 ## Installation

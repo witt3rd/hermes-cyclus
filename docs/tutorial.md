@@ -67,7 +67,7 @@ Every loop starts at **L1 (report-only)**. The loop proposes; you decide.
 You do not know whether your eval command is correct, whether the baseline is
 right, or whether the loop is actually improving anything — until L1 shows you.
 
-The `level: L1` field in every `spec.md` is the machine-readable enforcement of
+The `level: L1` field in every `spec.yaml` is the machine-readable enforcement of
 this. L1 workers never touch the repo; they only write to `STATE.md`.
 
 ---
@@ -79,7 +79,7 @@ this. L1 workers never touch the repo; they only write to `STATE.md`.
 │  hermes cron fires (e.g. 9:00 AM Monday)                │
 │                                                         │
 │  1. Fresh agent session starts                          │
-│  2. Reads spec.md (goal, metric, terminal conditions)   │
+│  2. Reads spec.yaml (goal, metric, terminal conditions) │
 │  3. Reads STATE.md (what was tried, lessons learned)    │
 │  4. Proposes one improvement                            │
 │  5. Runs the eval command, records the score            │
@@ -117,7 +117,7 @@ python3 -c "import json; d=json.load(open('coverage.json')); print(d['totals']['
 ```
 
 This is the number the loop will try to improve. It's already recorded in
-`examples/test_coverage/spec.md` as `baseline: 77.93`.
+`examples/test_coverage/spec.yaml` as `baseline: 77.93`.
 
 **Step 2: Initialize STATE.md**
 
@@ -137,7 +137,7 @@ hermes cron create "0 9 * * 1-5" \
   --skill cyclus-ralph \
   --workdir "$(pwd)" \
   --deliver local \
-  "Read examples/test_coverage/spec.md. Read STATE.md.
+  "Read examples/test_coverage/spec.yaml. Read STATE.md.
 Run one MetricOptimizationKind turn at level L1:
 1. Run: PYTHONPATH=. uv run pytest tests/ --cov=. --cov-report=json -q 2>/dev/null
 2. Read coverage.json and extract coverage_percent.

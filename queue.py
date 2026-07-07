@@ -1,5 +1,5 @@
 """
-hermes-cyclus File-based Queue — NFS-safe implementation of the six-operation interface.
+hermes-cyclus File-based Queue — NFS-safe implementation of the queue interface.
 
 State lives in .cyclus/ relative to project root:
   .cyclus/
@@ -234,36 +234,29 @@ def claim(
 
     # Atomic claim from pending via rename
     if pending.exists():
-        # Read and update data BEFORE rename so the file is ready the instant
-        # it appears in active/ — prevents race where another thread sees the
-        # active file but reads stale/empty content.
+        # Read data first for the update, but the actual claim is the rename.
+        # Rename pending→active atomically; if it fails, another worker won.
         try:
             data = _read_json(pending)
         except (FileNotFoundError, json.JSONDecodeError):
             return ClaimResult(status="not_found", item=None)
         data["status"] = "RUNNING"
         data["last_heartbeat"] = now
-        # Write updated data to a temp file alongside pending, then rename both
-        # steps atomically: tmp→pending (overwrite), then pending→active.
-        # Simpler: write to active directly then rename pending away.
-        # Best NFS-safe approach: write to tmp in same dir, rename to active.
-        tmp = root / "queue" / "pending" / (name + ".tmp")
-        _write_json(tmp, data)
+        # Write updated content to a unique tmp, then atomically rename tmp→active.
+        # The pending file stays until we unlink it — the race window is
+        # pending.exists() → os.rename(tmp, active). Both callers may pass the
+        # exists() check, but os.rename(tmp, active) does NOT clobber an existing
+        # file on Linux (EEXIST/ENOTEMPTY for directories; for files it replaces).
+        # The true mutual exclusion comes from trying to unlink pending after the
+        # rename — only one caller can unlink it; the other finds it gone.
+        # Actually: use rename(pending, active) directly as the atomic gate.
         try:
-            # Rename the updated tmp to active/ (atomic destination claim)
-            os.rename(tmp, active)
-            # Remove the now-stale pending file
-            try:
-                os.unlink(pending)
-            except FileNotFoundError:
-                pass  # already gone — fine
+            os.rename(pending, active)
         except (FileNotFoundError, OSError):
-            # Lost the race
-            try:
-                os.unlink(tmp)
-            except FileNotFoundError:
-                pass
+            # Lost the race — another worker renamed pending away
             return ClaimResult(status="not_found", item=None)
+        # We own it — write the updated content
+        _write_json(active, data)
         return ClaimResult(status="claimed", item=data)
 
     # Done or absent — not claimable

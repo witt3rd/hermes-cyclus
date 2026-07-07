@@ -67,9 +67,11 @@ terminal:
   plateau_count: 5
 ```
 
-The spec is machine-validated by the planning gate. A malformed spec — missing
-`kind`, missing `level`, missing terminal conditions — cannot be dispatched.
-This is the structural enforcement. Not a guideline. Not a warning. A gate.
+The spec is machine-validated by the planning gate. A malformed spec — wrong
+`kind`, invalid `level`, or invalid field types — cannot be dispatched.
+Missing terminal conditions use defaults (`max_iterations: 100`) but `kind`
+and `name` are required. This is the structural enforcement. Not a guideline.
+Not a warning. A gate.
 
 ### 3. DECOMPOSE
 
