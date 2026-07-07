@@ -11,11 +11,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: cyclus   # checkout into 'cyclus/' so imports resolve
 
       - uses: astral-sh/setup-uv@v3
 
       - name: Install dependencies
+        working-directory: cyclus
         run: uv sync --dev
 
       - name: Run tests
+        working-directory: cyclus
         run: uv run pytest tests/ -q
+        # pythonpath=[".."] in pyproject.toml adds parent of 'cyclus/' to sys.path
+        # so 'import cyclus' resolves to this checkout directory
