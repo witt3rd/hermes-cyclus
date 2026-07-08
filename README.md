@@ -16,7 +16,7 @@ accumulating — so the system prompts the agent instead of you.
 hermes "improve test coverage"
 
 # After: the loop runs every morning, proposes improvements, updates STATE.md
-hermes cron create "0 9 * * 1-5" --skill cyclus-ralph --workdir "$PWD" \
+hermes cron create "0 9 * * 1-5" --skill cyclus-loop --workdir "$PWD" \
   "Run one test-coverage turn. Propose one improvement. Update STATE.md."
 ```
 
@@ -64,11 +64,11 @@ means decompose smaller, never bypass.
 
 | Skill | Loop kind | What one turn does |
 |-------|-----------|------------|
-| `cyclus-ralph` | `TaskExecutionKind` | Execute one task from a plan, verify, advance |
+| `cyclus-loop` | `TaskExecutionKind` | Execute one task from a plan, verify, advance |
 | `cyclus-autopilot` | `TaskExecutionKind` | Drive a multi-phase project pipeline |
-| `cyclus-ralplan` | `ConsensusKind` | Run one adversarial deliberation round |
-| `cyclus-deep-research` | `InformationSeekingKind` | Search, gap-check, advance toward sufficiency |
-| `cyclus-deep-interview` | `ClarificationKind` *(HUMAN_GATED)* | Elicit requirements; only human confirms done |
+| `cyclus-plan` | `ConsensusKind` | Run one adversarial deliberation round |
+| `cyclus-research` | `InformationSeekingKind` | Search, gap-check, advance toward sufficiency |
+| `cyclus-interview` | `ClarificationKind` *(HUMAN_GATED)* | Elicit requirements; only human confirms done |
 | `cyclus-triage` | `BatchKind` | Fan-out Maintainer + Skeptic passes on an issue backlog |
 
 ## Queue backends

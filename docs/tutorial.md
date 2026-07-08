@@ -41,7 +41,7 @@ With it you have a system.
 # Use hermes cron.
 hermes cron create "0 9 * * 1-5" \
   --name "my-loop" \
-  --skill cyclus-ralph \
+  --skill cyclus-loop \
   --workdir "$PWD" \
   --deliver local \
   "Run one turn. Update STATE.md. Do not commit."
@@ -134,7 +134,7 @@ and writes this file on every tick.
 ```bash
 hermes cron create "0 9 * * 1-5" \
   --name "cyclus-test-coverage" \
-  --skill cyclus-ralph \
+  --skill cyclus-loop \
   --workdir "$(pwd)" \
   --deliver local \
   "Read examples/test_coverage/spec.yaml. Read STATE.md.
@@ -190,7 +190,7 @@ in an isolated worktree:
 # Proposer — same as L1 above
 PROPOSER_ID=$(hermes cron create "0 9 * * 1-5" \
   --name "coverage-proposer" \
-  --skill cyclus-ralph \
+  --skill cyclus-loop \
   --workdir "$(pwd)" \
   --deliver local \
   "Propose one test improvement as a fenced patch. Update STATE.md. Do not apply." \
@@ -199,7 +199,7 @@ PROPOSER_ID=$(hermes cron create "0 9 * * 1-5" \
 # Verifier — receives proposer stdout as injected context
 hermes cron create "5 9 * * 1-5" \
   --name "coverage-verifier" \
-  --skill cyclus-ralph-driver \
+  --skill cyclus-loop-dispatcher \
   --workdir "$(pwd)" \
   --deliver local \
   "Read the injected proposer output. Apply the fenced patch in an isolated

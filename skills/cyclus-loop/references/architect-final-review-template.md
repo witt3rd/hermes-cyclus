@@ -17,7 +17,7 @@ the per-task verifiers couldn't see.
 
 - Repo: <absolute path>
 - Branch: <branch name>
-- Tasks completed: <N> (all `passes: true` in ralph-tasks state)
+- Tasks completed: <N> (all `passes: true` in loop-tasks state)
 - Iterations: <M>
 - Strikes encountered: <K> (categorized: <X test-infra, Y spec-misread,
   Z impl-bug>)
@@ -40,7 +40,7 @@ The orchestrator's iteration log (if present):
 - <absolute path to .omh/logs/ralph-progress.md or domain equivalent>
 
 Per-task state:
-- `.omh/state/ralph-tasks--<instance_id>.json` for verifier verdicts +
+- `.omh/state/loop-tasks--<instance_id>.json` for verifier verdicts +
   forward-encoded learnings.
 
 ## Your job
@@ -118,7 +118,7 @@ Structure:
   what / why fold-not-block / where to add it.
 - **Discovered tasks (if REQUEST_CHANGES):** new tasks the architect
   surfaces, in `discovered: true` shape, ready for the orchestrator to
-  add to ralph-tasks state.
+  add to loop-tasks state.
 - **What this run proved about the plan:** any plan-shape feedback
   worth folding into future ralplan/ralph runs.
 ```
@@ -156,7 +156,7 @@ proviso. Provisos are foldable; if it's not foldable, don't fold it.
 Something cannot ship as-is. The architect surfaces:
 
 - New tasks (in `discovered: true` shape) the orchestrator adds to
-  ralph-tasks state.
+  loop-tasks state.
 - A specific failing case that the test suite missed.
 - An architectural drift between stance and implementation that
   must be reconciled before merge.

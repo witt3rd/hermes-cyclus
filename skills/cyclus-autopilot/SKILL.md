@@ -24,7 +24,7 @@ This skill implements a `TaskExecutionKind` loop (multi-phase pipeline).
 
 - Single-file changes or trivial tasks (just do them)
 - You want to stay in one continuous session (autopilot is multi-session)
-- You only need planning (cyclus-ralplan) or execution (cyclus-ralph)
+- You only need planning (cyclus-plan) or execution (cyclus-loop)
 
 ## Prerequisites
 
@@ -33,12 +33,12 @@ This skill implements a `TaskExecutionKind` loop (multi-phase pipeline).
 ## Architecture: One Phase Step Per Invocation
 
 Each autopilot invocation reads state, does ONE unit of work, exits. The caller re-invokes.
-This preserves fresh context at every level — including during the ralph loop.
+This preserves fresh context at every level — including during the loop.
 
 ```
 Invocation 1:   Phase 0 — requirements (or skip)
 Invocation 2:   Phase 1 — planning (or skip)
-Invocations 3-N: Phase 2 — ralph iterations (one per call)
+Invocations 3-N: Phase 2 — loop iterations (one per call)
 Invocation N+1: Phase 3 — QA cycle         [FRESH SESSION]
 Invocation M:   Phase 4 — validation round  [FRESH SESSION]
 Final:          Phase 5 — cleanup → complete
@@ -50,14 +50,14 @@ See `references/caller-examples.md` for how to drive the loop.
 
 ### Step 0: Resolve Instance and Claim
 
-Autopilot drives a goal through spec → plan → ralph → QA → validation.
+Autopilot drives a goal through spec → plan → loop → QA → validation.
 Two autopilot sessions on the same goal would race on state simultaneously.
 Use per-instance queue claims for mutual exclusion.
 
 1. **Resolve `instance_id`** in this order:
    - If a confirmed spec exists at `.omh/specs/{name}-spec.md`, use
      `instance_id = "{name}"`.
-   - Else if a plan exists at `.omh/plans/ralplan-{slug}.md`, use
+   - Else if a plan exists at `.omh/plans/plan-{slug}.md`, use
      `instance_id = "{slug}"`.
    - Else derive from the goal: `instance_id = kebab(goal)[:60]`.
 2. **Post the work item** (idempotent — safe to call on every invocation):
@@ -75,7 +75,7 @@ Use per-instance queue claims for mutual exclusion.
      offer wait/cancel/different goal.
    - `status="not_found"`: unexpected — `post()` first, then `claim()`.
 4. **Pass `instance_id` to every `cyclus_queue` call** in this invocation
-   (autopilot, ralph, ralph-tasks modes).
+   (autopilot, loop, autopilot modes).
 5. **Release at every exit point** (paused, blocked, exception):
    ```
    cyclus_queue(action="release", mode="autopilot", instance_id="{instance_id}")
@@ -97,19 +97,19 @@ After claiming, read the current `phase` from the work item's `state_path` file:
 When autopilot state is absent, detect artifacts:
 
 1. Confirmed spec in `.omh/specs/*-spec.md` → create state at Phase 1
-2. Consensus plan in `.omh/plans/ralplan-*.md` → create state at Phase 2
-3. Ralph complete — check `cyclus_queue(action="status", mode="ralph", instance_id="{instance_id}")`;
+2. Consensus plan in `.omh/plans/plan-*.md` → create state at Phase 2
+3. Ralph complete — check `cyclus_queue(action="status", mode="loop", instance_id="{instance_id}")`;
    if `status="COMPLETE"` → create state at Phase 3
 4. Nothing → create state at Phase 0
 
-Check for active ralph: `cyclus_queue(action="status", mode="ralph", instance_id="{instance_id}")` →
+Check for active loop: `cyclus_queue(action="status", mode="loop", instance_id="{instance_id}")` →
 if `status` is `RUNNING` or `PENDING`, warn about existing session.
 
 Initialize state via `cyclus_queue(action="write_state", mode="autopilot", instance_id="{instance_id}", state={...})`:
 
 ```
 {
-    "phase": "requirements", "goal": "...", "ralph_iteration": 0,
+    "phase": "requirements", "goal": "...", "loop_iteration": 0,
     "qa_cycle": 0, "max_qa_cycles": 5, "validation_round": 0,
     "max_validation_rounds": 3, "validation_verdicts": {},
     "skip_qa": false, "skip_validation": false, "pause_after_phase": null
@@ -125,20 +125,20 @@ Initialize state via `cyclus_queue(action="write_state", mode="autopilot", insta
    then `cyclus_queue(action="release", mode="autopilot", instance_id="{instance_id}")`, exit.
 2. Not found — assess input:
    - **Concrete** (file paths, function names, specific tech): generate inline spec, advance
-   - **Vague**: Load `cyclus-deep-interview` and follow it. **This phase is interactive.**
+   - **Vague**: Load `cyclus-interview` and follow it. **This phase is interactive.**
 3. Update state: `phase: "planning"`, `spec_file: "<path>"`. Call `write_state(...)`, `release()`, exit.
 
-**For fully autonomous runs**: run `cyclus-deep-interview` separately first.
+**For fully autonomous runs**: run `cyclus-interview` separately first.
 
 ### Phase 1: Planning
 
 **Goal**: Ensure a consensus plan exists.
 
-1. Check `.omh/plans/ralplan-*.md` → found? Set `plan_file`, advance to Phase 2:
-   call `cyclus_queue(action="write_state", mode="autopilot", instance_id="{instance_id}", state={..., "phase": "execution", "plan_file": "...", "ralph_iteration": 0})`,
+1. Check `.omh/plans/plan-*.md` → found? Set `plan_file`, advance to Phase 2:
+   call `cyclus_queue(action="write_state", mode="autopilot", instance_id="{instance_id}", state={..., "phase": "execution", "plan_file": "...", "loop_iteration": 0})`,
    then `cyclus_queue(action="release", mode="autopilot", instance_id="{instance_id}")`, exit.
-2. Not found: Load `cyclus-ralplan`, follow its procedure with the spec as input.
-3. Update state: `phase: "execution"`, `plan_file`, `ralph_iteration: 0`.
+2. Not found: Load `cyclus-plan`, follow its procedure with the spec as input.
+3. Update state: `phase: "execution"`, `plan_file`, `loop_iteration: 0`.
    Call `write_state(...)`, `release()`, exit.
 
 Each phase transition follows the pattern: `write_state({phase: "next_phase", ...})` →
@@ -146,22 +146,22 @@ Each phase transition follows the pattern: `write_state({phase: "next_phase", ..
 
 ### Phase 2: Execution (Ralph Iterations)
 
-Each invocation performs **exactly ONE ralph iteration**:
+Each invocation performs **exactly ONE loop iteration**:
 
-1. Load the ralph skill and run one iteration via `delegate_task`:
+1. Load the loop skill and run one iteration via `delegate_task`:
    ```
-   ralph_skill = skill_view(name="cyclus-ralph")
+   loop_skill = skill_view(name="cyclus-loop")
    delegate_task(
-     goal="Follow the cyclus-ralph skill procedure: read state, pick the next incomplete task, execute it, verify, update state, exit.",
-     context="<current ralph state + plan file contents>\n\n## Ralph Skill Procedure\n{ralph_skill}"
+     goal="Follow the cyclus-loop skill procedure: read state, pick the next incomplete task, execute it, verify, update state, exit.",
+     context="<current loop state + plan file contents>\n\n## Loop Skill Procedure\n{ralph_skill}"
    )
    ```
-2. After ralph completes its step, check ralph status:
+2. After loop completes its step, check loop status:
    ```
-   ralph = cyclus_queue(action="status", mode="ralph", instance_id="{instance_id}")
+   loop_status = cyclus_queue(action="status", mode="loop", instance_id="{instance_id}")
    ```
-   - `status` is `PENDING` or `RUNNING` (still active) → increment `ralph_iteration`,
-     call `write_state({..., "ralph_iteration": N})`, call `release()`, exit (caller re-invokes).
+   - `status` is `PENDING` or `RUNNING` (still active) → increment `loop_iteration`,
+     call `write_state({..., "loop_iteration": N})`, call `release()`, exit (caller re-invokes).
    - `status` is `COMPLETE` → advance:
      call `write_state({..., "phase": "qa"})`, call `release()`, exit.
    - `status` is `BLOCKED` or `CANCELLED` → set autopilot `phase: "blocked"`,
@@ -222,11 +222,11 @@ If `skip_validation: true` → advance to Phase 5: `write_state({..., "phase": "
 2. Call `complete()` for all queue items associated with this run:
    ```
    cyclus_queue(action="complete", mode="autopilot", instance_id="{instance_id}", terminal_state="PlanComplete")
-   cyclus_queue(action="complete", mode="ralph", instance_id="{instance_id}", terminal_state="PlanComplete")
-   cyclus_queue(action="complete", mode="ralph-tasks", instance_id="{instance_id}", terminal_state="PlanComplete")
+   cyclus_queue(action="complete", mode="loop", instance_id="{instance_id}", terminal_state="PlanComplete")
+   cyclus_queue(action="complete", mode="loop-tasks", instance_id="{instance_id}", terminal_state="PlanComplete")
    ```
 3. Preserve: `.omh/logs/`, `.omh/plans/`, `.omh/specs/`
-4. Report completion summary: goal, phases completed, ralph iterations, QA cycles, validation rounds
+4. Report completion summary: goal, phases completed, loop iterations, QA cycles, validation rounds
 
 ## State Management
 
@@ -241,12 +241,12 @@ cyclus_queue(action="status", mode="autopilot", instance_id="{instance_id}")
 → item dict with status (PENDING|RUNNING|COMPLETE|BLOCKED|CANCELLED) and state_path
 ```
 
-Read `state_path` for `{phase, goal, ralph_iteration, ...}`.
+Read `state_path` for `{phase, goal, loop_iteration, ...}`.
 
 ## Pitfalls
 
-- **Don't loop ralph in a single session.** Each ralph iteration is a separate invocation. Context exhaustion is real.
-- **Don't reimplement ralph.** Load the skill via `skill_view`, follow its procedure.
+- **Don't loop in a single session.** Each loop iteration is a separate invocation. Context exhaustion is real.
+- **Don't reimplement cyclus-loop.** Load the skill via `skill_view`, follow its procedure.
 - **Phase boundaries = fresh sessions.** Call `release()` at the end of each phase before
   exiting. The next invocation claims fresh and reads the current phase from state.
 - **Don't skip QA.** Ralph verifies per-task. QA catches integration issues.

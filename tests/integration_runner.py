@@ -181,7 +181,7 @@ def _():
 def _():
     from tools.registry import registry
     h = registry._tools["omh_state"].handler
-    h({"action": "write", "mode": "ralph", "data": {"active": True, "phase": "execute"}})
+    h({"action": "write", "mode": "loop", "data": {"active": True, "phase": "execute"}})
 
     for key, mod in sys.modules.items():
         if key.endswith("omh_state") and hasattr(mod, "_list_cache"):
@@ -190,16 +190,16 @@ def _():
     results = manager.invoke_hook("pre_llm_call", is_first_turn=True)
     assert len(results) >= 1, "pre_llm_call returned no results"
     assert "context" in results[0]
-    assert "ralph" in results[0]["context"]
+    assert "loop" in results[0]["context"]
 
-    h({"action": "clear", "mode": "ralph"})
+    h({"action": "clear", "mode": "loop"})
 
 
 @test("on_session_end hook: writes _interrupted_at")
 def _():
     from tools.registry import registry
     h = registry._tools["omh_state"].handler
-    h({"action": "write", "mode": "ralph", "data": {"active": True, "phase": "execute"}})
+    h({"action": "write", "mode": "loop", "data": {"active": True, "phase": "execute"}})
 
     for key, mod in sys.modules.items():
         if key.endswith("omh_state") and hasattr(mod, "_list_cache"):
@@ -207,10 +207,10 @@ def _():
 
     manager.invoke_hook("on_session_end")
 
-    r = json.loads(h({"action": "read", "mode": "ralph"}))
+    r = json.loads(h({"action": "read", "mode": "loop"}))
     assert "_interrupted_at" in r["data"], f"_interrupted_at not set: {r['data']}"
 
-    h({"action": "clear", "mode": "ralph"})
+    h({"action": "clear", "mode": "loop"})
 
 
 # ---- Summary -------------------------------------------------------------

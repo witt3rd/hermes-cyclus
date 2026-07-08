@@ -9,7 +9,7 @@ metadata:
     requires_toolsets: [terminal, omh, delegation]
 ---
 
-# OMH Triage — Consensus Backlog Grooming
+# Cyclus Triage — Consensus Backlog Grooming
 
 > **v0.1 status:** This skill is **deliberately small**. It ships with two roles (Maintainer, Skeptic) and is being battle-tested before more roles are added. The full design hypothesis (Maintainer / Operator / Architect / Member-advocate / Skeptic) lives in [witt3rd/hermes-cyclus#9](https://github.com/witt3rd/hermes-cyclus/issues/9). The next concrete milestone (Operator role for version-cut planning pressure) is tracked at [witt3rd/hermes-cyclus#11](https://github.com/witt3rd/hermes-cyclus/issues/11). Roles will be added as lived rounds surface real tensions that the current set cannot represent. The discipline here is *learn through use, then expand* — the inverse of authoring all five roles up-front against imagined friction.
 
@@ -21,7 +21,7 @@ metadata:
 
 ## When NOT to Use
 
-- A single ambiguous issue that needs design (use `cyclus-deep-interview` then `cyclus-ralplan`)
+- A single ambiguous issue that needs design (use `cyclus-interview` then `cyclus-plan`)
 - A backlog that's never been groomed and has hundreds of issues (do a manual first-pass cull first; this skill is for keeping a curated backlog honest, not for archaeology on a rotted one)
 - Closing during active dev (don't mix the two-mode discipline — capture during dev, decide during grooming; see the host project's `docs/triage/PROCESS.md` if it has one)
 
@@ -44,7 +44,7 @@ Before dispatching any roles, the orchestrator gathers:
 4. **Existing project board state** (if any). Read target version, cluster, status fields for context.
 5. **Prior triage doc** (if any). The most recent `docs/triage/YYYY-MM-DD-*.md` is delta-since-last-pass anchor.
 
-Phase 0's output is a ~500-word context package that all subagents will receive. Same shape as `cyclus-ralplan` Phase 0.
+Phase 0's output is a ~500-word context package that all subagents will receive. Same shape as `cyclus-plan` Phase 0.
 
 ### Phase 1: Role passes (sequential, parallel where possible)
 
@@ -164,7 +164,7 @@ The verdict-combination matrix in Phase 1 Step 3 is **authoritative** — `live`
 
 True escalations are: the Skeptic returns `needs lived signal` (escape hatch), the Maintainer returns `needs investigation` (escape hatch), or some future role's verdict produces a combination the matrix doesn't enumerate. These are rare in v0.1 and surface to user as specific decision questions, not as "there are some conflicts."
 
-The dispatcher should also feel free to **override the matrix** for individual issues when their own bar applied to the verdict produces a different read — but that's a dispatcher-judgment call, not a matrix conflict. Note overrides explicitly in the orchestrator review (`cyclus-ralplan-driver` P25 — skepticism over deference applies here too).
+The dispatcher should also feel free to **override the matrix** for individual issues when their own bar applied to the verdict produces a different read — but that's a dispatcher-judgment call, not a matrix conflict. Note overrides explicitly in the orchestrator review (`cyclus-plan-dispatcher` P25 — skepticism over deference applies here too).
 
 ### T5 — A round produces a durable doc
 
@@ -174,14 +174,68 @@ The triage doc under `docs/triage/YYYY-MM-DD-*.md` is the round's audit trail. I
 
 This skill is v0.1 deliberately. The OMH#9 design names five roles; only two ship today. Adding Operator / Architect / Member-advocate before lived rounds surface real tensions for them is the "imagined friction" failure mode. Wait for evidence.
 
-## Pairs With
+---
 
-- `cyclus-triage-driver` — the dispatcher's playbook (when to invoke, how to drive, what good output looks like)
-- `cyclus-ralplan-driver` — analogous skill for the design layer; the discipline patterns are similar
-- `cyclus-deep-interview` — for ambiguous issues that need clarification before triage can decide
+## Dispatcher Pre-flight (do this before Phase 0)
+
+### Audit the backlog
+
+- **<10 issues** → decide manually; triage overkill
+- **>100 issues** → backlog has rotted; manual cull first
+- **<2 weeks since last grooming AND no major refactor** → probably skip
+- **Recent migrations/refactors** → this is the load-bearing check. What surfaces moved since issues were filed? High movement = high-leverage triage run.
+
+### Identify the trigger
+
+| Trigger | What it means |
+|---------|---------------|
+| About to cut vN+1 | Output targets version field. Maintainer dominates. |
+| Just shipped major migration | Cleanup pass. Mostly closures. |
+| Backlog feels heavy | Skeptic's pressure dominates. |
+| Periodic hygiene | Low priority. Defer until a real trigger exists. |
+
+The trigger shapes how you weight role outputs. Name it before dispatching.
+
+### Verify infrastructure
+
+Does the project have:
+- `docs/triage/PROCESS.md` (two-mode discipline: quick-file vs grooming)?
+- A GitHub Project with version + cluster fields?
+- A prior triage doc to delta against?
+
+If not, propose authoring these first — triage produces dated docs and board updates; without the infrastructure, output evaporates.
+
+### Dispatcher's job during the run
+
+- **Phase 0:** Author the context package yourself (~500 words). Don't delegate it — the package shapes both roles' work and a bad package wastes both passes.
+- **Phase 1:** Maintainer first; Skeptic only on Maintainer's live + recast output. Don't run them parallel-from-scratch — the Skeptic needs Maintainer's verdicts.
+- **Phase 2:** You produce the resolution table. Conflicts → specific decision question to user, not generic "there's some disagreement." Format each as: "Maintainer says X for reason A; Skeptic says Y for reason B; my recommendation is Z."
+- **Phase 3:** User-gated execution. Read every close comment before posting. A wrongly-closed issue is harder to recover than a wrongly-kept one.
+
+### Pre-flight pitfalls
+
+**T1 — Skipping ground-truth pre-flight.** Bad ground truth produces stale verdicts that look authoritative. Spend 10 minutes mapping recent migrations before dispatching.
+
+**T2 — Writing the triage doc before the run.** Don't validate pre-decided verdicts. Write the doc *from* the run output.
+
+**T3 — Scope creep.** If a role surfaces "we should redesign X" — that's a ralplan, not triage. Note in deferred section.
+
+**T4 — Rubber-stamping closures.** Read every close comment. Ratify each verdict, don't rubber-stamp.
+
+**T5 — Vague conflict presentation.** Frame conflicts as specific decision questions with your recommendation, not as "there's some disagreement."
+
+**T6 — Running too often.** If dispatching weekly, the problem is upstream (filing discipline, backlog size), not triage frequency.
+
+---
+
+## References (internal — not user-facing skills)
+
+- `references/role-triage-maintainer.md` — Maintainer role prompt (load via `skill_view`)
+- `references/role-triage-skeptic.md` — Skeptic role prompt
+- `references/triage-doc-template.md` — Round doc structure
+- `references/orchestrator-review-template.md` — Pre-execution review checklist
 
 ## See Also
 
 - [`witt3rd/hermes-cyclus#9`](https://github.com/witt3rd/hermes-cyclus/issues/9) — design tracking issue
-- `references/role-triage-maintainer.md`
-- `references/role-triage-skeptic.md`
+

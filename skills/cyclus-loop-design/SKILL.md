@@ -18,7 +18,7 @@ metadata:
 
 This skill is the structural expression of Loop-Driven Development (LDD).
 It produces a validated `spec.yaml` and a ralph-shaped `plan.md` that the
-`cyclus-ralph` planning gate will accept. Nothing gets dispatched until this
+`cyclus-loop` planning gate will accept. Nothing gets dispatched until this
 skill approves the loop design.
 
 **This skill is itself a loop.** The discipline that enforces well-formed loops
@@ -32,7 +32,7 @@ Read `docs/ldd.md` before using this skill.
 
 - Before dispatching ANY loop that isn't trivially obvious
 - When you have a goal but no `spec.yaml`
-- When a `cyclus-ralph` run timed out (decompose smaller via this skill first)
+- When a `cyclus-loop` run timed out (decompose smaller via this skill first)
 - When the user says: "design a loop", "loop-design", "spec this out", "LDD"
 
 ## When NOT to use
@@ -178,7 +178,7 @@ Report to the user:
 - The loop kind chosen and why
 - The decomposition (N tasks, estimated budget per task)
 - Any anti-patterns caught and how they were resolved
-- The exact `cyclus-ralph` invocation to dispatch
+- The exact `cyclus-loop` invocation to dispatch
 
 ---
 
@@ -217,7 +217,7 @@ the plan serves the original intent.
   Saves 60-90s per round.
 
 - **The Architect's job is decomposition, not architecture.**
-  cyclus-loop-design is not about system architecture (that's cyclus-ralplan).
+  cyclus-loop-design is not about system architecture (that's cyclus-plan).
   It's about whether the *loop* is well-formed: right kind, budget-sized tasks,
   verifiable terminal conditions.
 

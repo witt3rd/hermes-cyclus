@@ -51,19 +51,19 @@ def queue_env(tmp_path, monkeypatch):
 
 def test_post_non_string_instance_id_raises(queue_env):
     with pytest.raises(ValueError, match="must be a string"):
-        post(mode="ralph", instance_id=123, kind="TaskExecutionKind", name="x")  # type: ignore[arg-type]
+        post(mode="loop", instance_id=123, kind="TaskExecutionKind", name="x")  # type: ignore[arg-type]
 
 
 def test_post_too_long_instance_id_raises(queue_env):
     long_id = "a" * 300
     with pytest.raises(ValueError, match="too long"):
-        post(mode="ralph", instance_id=long_id, kind="TaskExecutionKind", name="x")
+        post(mode="loop", instance_id=long_id, kind="TaskExecutionKind", name="x")
 
 
 def test_post_empty_normalizing_instance_id_raises(queue_env):
     # A string composed entirely of special chars normalizes to empty slug
     with pytest.raises(ValueError, match="normalizes to empty slug"):
-        post(mode="ralph", instance_id="---!!!", kind="TaskExecutionKind", name="x")
+        post(mode="loop", instance_id="---!!!", kind="TaskExecutionKind", name="x")
 
 
 # ---------------------------------------------------------------------------
@@ -128,10 +128,10 @@ def test_turn_history_invalid_mode_raises(queue_env):
 
 def test_write_state_on_non_running_item_raises(queue_env):
     """write_state requires an active (RUNNING) item; PENDING item should fail."""
-    post(mode="ralph", instance_id="ws-pending", kind="TaskExecutionKind", name="x")
+    post(mode="loop", instance_id="ws-pending", kind="TaskExecutionKind", name="x")
     # Item is PENDING, not claimed → no active file
     with pytest.raises(ValueError, match="No active work item"):
-        write_state(mode="ralph", instance_id="ws-pending", state={"k": 1})
+        write_state(mode="loop", instance_id="ws-pending", state={"k": 1})
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +141,7 @@ def test_write_state_on_non_running_item_raises(queue_env):
 
 def test_complete_nonexistent_raises(queue_env):
     with pytest.raises(ValueError, match="No work item found"):
-        complete(mode="ralph", instance_id="no-such-99", terminal_state="Done")
+        complete(mode="loop", instance_id="no-such-99", terminal_state="Done")
 
 
 # ---------------------------------------------------------------------------
@@ -150,8 +150,8 @@ def test_complete_nonexistent_raises(queue_env):
 
 
 def test_turn_history_no_file(queue_env):
-    post(mode="ralph", instance_id="th-none", kind="TaskExecutionKind", name="x")
-    result = turn_history(mode="ralph", instance_id="th-none")
+    post(mode="loop", instance_id="th-none", kind="TaskExecutionKind", name="x")
+    result = turn_history(mode="loop", instance_id="th-none")
     assert result == []
 
 
@@ -163,8 +163,8 @@ def test_turn_history_no_file(queue_env):
 def test_claim_reclaims_active_with_corrupt_heartbeat(queue_env, tmp_path):
     """When last_heartbeat is unparseable, the item should be treated as stale."""
     # Post and claim to move item to active/
-    post(mode="ralph", instance_id="hb-corrupt", kind="TaskExecutionKind", name="x")
-    claim(mode="ralph", instance_id="hb-corrupt")
+    post(mode="loop", instance_id="hb-corrupt", kind="TaskExecutionKind", name="x")
+    claim(mode="loop", instance_id="hb-corrupt")
 
     # Corrupt the heartbeat timestamp in the active file
     active_dir = tmp_path / ".cyclus" / "queue" / "active"
@@ -174,7 +174,7 @@ def test_claim_reclaims_active_with_corrupt_heartbeat(queue_env, tmp_path):
     active_file.write_text(json.dumps(data))
 
     # Claim again — corrupt heartbeat → treated as stale → re-claimed
-    result = claim(mode="ralph", instance_id="hb-corrupt")
+    result = claim(mode="loop", instance_id="hb-corrupt")
     assert result.status == "claimed"
 
 
