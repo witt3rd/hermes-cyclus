@@ -147,7 +147,7 @@ def test_queue_tool_generic_exception_returns_error(queue_env):
     """If the underlying queue operation raises an unexpected Exception,
     cyclus_queue_handler should catch it and return a JSON error."""
 
-    with patch("cyclus.tools.queue_tool.post", side_effect=RuntimeError("boom")):
+    with patch("cyclus.tools.queue_tool._file_post", side_effect=RuntimeError("boom")):
         result = json.loads(
             cyclus_queue_handler({
                 "action": "post",
