@@ -1,7 +1,7 @@
 # EVOLVE-BLOCK-START
 """Function minimization example for OpenEvolve"""
 import numpy as np
-from scipy.optimize import differential_evolution, minimize
+from scipy.optimize import differential_evolution
 
 
 def search_algorithm(iterations=1000, bounds=(-5, 5)):
@@ -24,12 +24,15 @@ def search_algorithm(iterations=1000, bounds=(-5, 5)):
     best_result = None
     best_val = np.inf
 
-    # Run multiple times and keep the best to ensure global minimum is found
-    for _ in range(3):
+    # Derive number of runs and maxiter from iterations parameter
+    n_runs = max(1, iterations // 400)
+    maxiter = max(100, iterations // n_runs)
+
+    for _ in range(n_runs):
         result = differential_evolution(
             obj,
             bounds=search_bounds,
-            maxiter=400,
+            maxiter=maxiter,
             tol=1e-10,
             popsize=20,
             mutation=(0.5, 1.5),

@@ -168,28 +168,19 @@ def test_install_skills_hermes_cli_fallback(tmp_path, monkeypatch):
     """When hermes_cli.config is unavailable, falls back to ~/.hermes/skills/cyclus."""
     from cyclus import _install_skills
 
-    # Provide a source dir with one skill
     src = tmp_path / "src"
     skill = src / "my-skill"
     skill.mkdir(parents=True)
     (skill / "SKILL.md").write_text("# test")
 
-    # Dest: we explicitly pass it so the fallback path is never actually written
-    # to the real ~/.hermes — we just test that the function works when
-    # hermes_cli is importable (success path uses it) or not (fallback).
     dest = tmp_path / "dest"
 
-    # Pretend hermes_cli raises on import — force the except branch
-    import builtins
-    original_import = builtins.__import__
-
-    def import_mock(name, *args, **kwargs):
-        if name == "hermes_cli.config":
-            raise ImportError("no hermes_cli")
-        return original_import(name, *args, **kwargs)
-
-    with patch("builtins.__import__", side_effect=import_mock):
-        # Must pass explicit dest so test is hermetic
+    # Deterministically force the except branch by patching the import
+    with patch("builtins.__import__", side_effect=lambda name, *a, **kw: (
+        (_ for _ in ()).throw(ImportError("no hermes_cli"))
+        if name == "hermes_cli.config"
+        else __import__(name, *a, **kw)
+    )):
         _install_skills(skills_src_root=src, skills_dest_root=dest)
 
     assert (dest / "my-skill" / "SKILL.md").exists()

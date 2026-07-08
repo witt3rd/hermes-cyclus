@@ -31,51 +31,12 @@ def reset_config_cache():
 
 def test_find_config_file_returns_none_when_missing(tmp_path, monkeypatch):
     """_find_config_file() returns None when neither candidate exists."""
-    # Patch candidates to point to non-existent paths
-    fake_candidates = [
-        tmp_path / "no-config.yaml",
-        tmp_path / "also-no-config.yaml",
-    ]
-    monkeypatch.setattr(
-        cyclus_config_module,
-        "_find_config_file",
-        lambda: None,
-    )
-    # Now exercise the real function by patching the module-level candidates
-    # via direct call from the source
-    from cyclus import cyclus_config
-    original = cyclus_config._find_config_file
-
-    # Temporarily swap the candidate list by monkeypatching Path.__file__ parent
-    # Easiest approach: just call it from a state where both candidates don't exist
-    # and verify None is returned.
-    reload_config()
-    cyclus_config_module._config_cache = None
-
-    # Use a fresh import and ensure neither candidate exists at runtime
-    import importlib
-    import sys
-
-    # Save and remove to force re-import
-    mod = sys.modules.get("cyclus.cyclus_config")
-
-    result = original()
-    # Result is either a Path (if one of the real config files happens to exist)
-    # or None — either way the function ran.
-    assert result is None or isinstance(result, Path)
-
-
-def test_find_config_file_none_path_directly(tmp_path, monkeypatch):
-    """Call _find_config_file directly with candidates that don't exist."""
     import cyclus.cyclus_config as mod
 
-    # Patch the candidates list to empty non-existent paths
-    monkeypatch.setattr(
-        mod,
-        "_find_config_file",
-        lambda: None,
-    )
-    assert mod._find_config_file() is None
+    # Patch Path.exists to always return False so real _find_config_file sees nothing
+    monkeypatch.setattr(Path, "exists", lambda self: False)
+    result = mod._find_config_file()
+    assert result is None
 
 
 def test_get_config_when_find_returns_none(monkeypatch):
