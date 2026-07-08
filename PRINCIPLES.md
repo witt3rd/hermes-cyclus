@@ -45,10 +45,11 @@ researcher, synthesist, skeptic, analyst, triage-maintainer, triage-skeptic,
 code-reviewer, security-reviewer, test-engineer, debugger) were refined
 through real runs. They are OMH's primary intellectual property.
 
-The *mechanism* that injects them (the `[cyclus-role:NAME]` marker, the
-`pre_llm_call` hook, the `omh_roles.py` catalog loader) is plumbing that
-retires in v18. Role prompts travel explicitly in `context=` on every
-delegation, loaded by the parent via `skill_view`.
+The *mechanism* that injects them (the `[cyclus-role:NAME]` marker passed
+in the goal string) is how roles travel. Role prompts are loaded explicitly
+via `skill_view(name=..., file_path="references/role-NAME.md")` by the
+parent before each `delegate_task` call — never injected by a hook or
+catalog loader.
 
 **Failure it prevents:** deleting role prompts as part of bespoke-deletion
 (wrong) or keeping bespoke injection machinery (wrong).
