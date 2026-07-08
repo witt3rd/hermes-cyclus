@@ -167,6 +167,7 @@ def test_queue_tool_generic_exception_returns_error(queue_env):
 def test_install_skills_hermes_cli_fallback(tmp_path, monkeypatch):
     """When hermes_cli.config is unavailable, falls back to ~/.hermes/skills/cyclus."""
     from cyclus import _install_skills
+    import sys
 
     src = tmp_path / "src"
     skill = src / "my-skill"
@@ -175,13 +176,16 @@ def test_install_skills_hermes_cli_fallback(tmp_path, monkeypatch):
 
     dest = tmp_path / "dest"
 
-    # Deterministically force the except branch by patching the import
-    with patch("builtins.__import__", side_effect=lambda name, *a, **kw: (
-        (_ for _ in ()).throw(ImportError("no hermes_cli"))
-        if name == "hermes_cli.config"
-        else __import__(name, *a, **kw)
-    )):
-        _install_skills(skills_src_root=src, skills_dest_root=dest)
+    # Remove hermes_cli* from sys.modules so the import inside _install_skills raises
+    saved = {k: v for k, v in sys.modules.items() if "hermes_cli" in k}
+    for k in saved:
+        del sys.modules[k]
+
+    try:
+        with patch.dict("sys.modules", {"hermes_cli": None, "hermes_cli.config": None}):
+            _install_skills(skills_src_root=src, skills_dest_root=dest)
+    finally:
+        sys.modules.update(saved)
 
     assert (dest / "my-skill" / "SKILL.md").exists()
 
