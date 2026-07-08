@@ -46,8 +46,65 @@ Or: cyclus-interview clarifies requirements → cyclus-plan designs → cyclus-l
 | **Serial** | 1 at a time | Default for all loop kinds. Each turn builds on the previous. |
 | **Swarm** | N in parallel | `MetricOptimizationKind` and `SelectionKind` only. Workers try different hypotheses simultaneously; verifier picks the best; loop continues from the winner. |
 
-Swarm is not a different skill — it is the same worker skill dispatched N times in
-parallel. The verifier/synthesizer is the loop controller in both topologies.
+Swarm is not a different architecture — it is the serial pattern with `N > 1` at
+the dispatch step. The verifier/synthesizer is the loop controller in both topologies.
+
+---
+
+## Swarm Isolation Strategy (decided)
+
+When N workers each propose a change to the same `target_files`, they must not
+collide. Every mature parallel optimization system (Ray Tune, Island-model GAs,
+CMA-ES) converges on the same invariant:
+
+> **The scheduler is the single writer to canonical state. Workers are proposers only.**
+
+### For text / code / config / prompt artifacts
+
+Create a **loop-scoped ephemeral git repo** (even if the outer project has no git):
+
+```bash
+# Create the loop repo with an initial empty commit (required before worktrees)
+git init /tmp/loop-{id}/
+git -C /tmp/loop-{id}/ commit --allow-empty -m "loop root"
+
+# Each worker gets an isolated worktree on its own branch
+git -C /tmp/loop-{id}/ worktree add worker-A -b worker/A
+git -C /tmp/loop-{id}/ worktree add worker-B -b worker/B
+git -C /tmp/loop-{id}/ worktree add worker-C -b worker/C
+```
+
+- Each worker has a fully isolated working directory on its own branch
+- Workers write their proposed change to their worktree — never to canonical
+- Verifier applies each proposal to a fresh copy of canonical, measures, picks winner
+- Dispatcher cherry-picks the winning worktree into canonical, `git worktree remove` the rest
+- The loop repo is reaped when the loop ends
+
+Benefits: diff, merge, rollback, audit trail, O(1) isolation via shared object store.
+The loop repo is orthogonal to the project's own git history.
+
+### For binary / structured artifacts (model weights, compiled outputs)
+
+Per-worker staging directories — no git needed:
+
+```
+staging/{worker_id}/artifact   ← worker writes here
+canonical/artifact             ← scheduler writes here (only)
+```
+
+Workers write to `staging/{worker_id}/`. Scheduler applies each to a fresh copy of
+canonical, measures, promotes the winner atomically.
+
+### Long-term: BranchFS (arXiv:2602.08199)
+
+Copy-on-write OS primitives with sub-350µs branch creation, first-commit-wins
+semantics, and artifact-type-agnostic isolation. The correct Saturate fleet
+primitive when available.
+
+### GC
+
+N workers × M iterations = N×M ephemeral artifacts. Build the reaper into the loop,
+not as an afterthought. `loop-spec`'s `output_dir` field is the hook for cleanup.
 
 ```
 Serial:  Dispatcher → Worker → (timeout) → Worker → ... → DONE
