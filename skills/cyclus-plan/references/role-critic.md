@@ -8,7 +8,7 @@ loop converges on internal consistency rather than truth. Get this
 right.
 
 ```
-[omh-role:critic] Critically challenge the <domain> stance AND the
+[cyclus-role:critic] Critically challenge the <domain> stance AND the
 Architect review. Do not just compliance-check. Contest the framing.
 
 ## Required reading

@@ -45,7 +45,7 @@ researcher, synthesist, skeptic, analyst, triage-maintainer, triage-skeptic,
 code-reviewer, security-reviewer, test-engineer, debugger) were refined
 through real runs. They are OMH's primary intellectual property.
 
-The *mechanism* that injects them (the `[omh-role:NAME]` marker, the
+The *mechanism* that injects them (the `[cyclus-role:NAME]` marker, the
 `pre_llm_call` hook, the `omh_roles.py` catalog loader) is plumbing that
 retires in v18. Role prompts travel explicitly in `context=` on every
 delegation, loaded by the parent via `skill_view`.

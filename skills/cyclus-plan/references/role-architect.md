@@ -3,7 +3,7 @@
 Used as the `goal` field in `delegate_task` for Round 1 Architect.
 
 ```
-[omh-role:architect] Review the <domain> design stance for
+[cyclus-role:architect] Review the <domain> design stance for
 architectural soundness.
 
 ## Required reading

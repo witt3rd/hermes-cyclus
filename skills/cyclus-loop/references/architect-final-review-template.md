@@ -11,7 +11,7 @@ all tasks, against the original plan/stance, with attention to seams
 the per-task verifiers couldn't see.
 
 ```
-[omh-role:architect] Final review of <domain> ralph run for merge readiness.
+[cyclus-role:architect] Final review of <domain> loop run for merge readiness.
 
 ## Project root + branch
 
