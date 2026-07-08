@@ -63,9 +63,10 @@ When N Saturate workers run the same loop in parallel, each worker's token and
 compute cost multiplies by N. A loop without a budget cap can exhaust resources
 across the whole fleet.
 
-**Fix:** Set `budget_tokens` in the loop spec (tracked in
-[loop-spec #4](https://github.com/witt3rd/loop-spec/issues/4)). This is especially
-critical for distributed execution — unattended loops at scale need a hard cost ceiling.
+**Fix:** Set a token/cost budget in the loop spec. This is tracked in
+[loop-spec #4](https://github.com/witt3rd/loop-spec/issues/4) which defines the
+`budget_tokens` field proposal. Until it lands, use `max_iterations` as a proxy
+ceiling and monitor token spend manually for distributed runs.
 
 ### 7. Verifier theater
 
@@ -73,11 +74,11 @@ Marking a hypothesis as improved without actually running the eval command. This
 happens when a verifier agent reasons about whether the change *should* improve the
 metric rather than measuring whether it *did*.
 
-**Fix:** The eval must run. Its output — parsed via the `metric:` field configured
-in the loop spec (e.g., `json:combined_score`, `json:coverage_percent`) — is the
-only valid measurement. Any verification step that does not invoke the eval command
-and parse its output is theater. Treat missing or malformed eval output as a crash,
-not a score.
+**Fix:** The eval must run. Its JSON output is the only valid measurement. Parse
+the value named by the `metric:` field in the loop spec (e.g., `metric: combined_score`
+means extract the `combined_score` key from the JSON output). Any verification step
+that does not invoke the eval command and parse its output is theater. Treat missing
+or malformed eval output as a crash, not a score.
 
 ---
 

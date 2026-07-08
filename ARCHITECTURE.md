@@ -63,11 +63,15 @@ CMA-ES) converges on the same invariant:
 
 Create a **loop-scoped ephemeral git repo** (even if the outer project has no git):
 
-```
+```bash
+# Create the loop repo with an initial empty commit (required before worktrees)
 git init /tmp/loop-{id}/
-git worktree add /tmp/loop-{id}/worker-A -b worker/A
-git worktree add /tmp/loop-{id}/worker-B -b worker/B
-git worktree add /tmp/loop-{id}/worker-C -b worker/C
+git -C /tmp/loop-{id}/ commit --allow-empty -m "loop root"
+
+# Each worker gets an isolated worktree on its own branch
+git -C /tmp/loop-{id}/ worktree add worker-A -b worker/A
+git -C /tmp/loop-{id}/ worktree add worker-B -b worker/B
+git -C /tmp/loop-{id}/ worktree add worker-C -b worker/C
 ```
 
 - Each worker has a fully isolated working directory on its own branch
