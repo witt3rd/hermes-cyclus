@@ -39,7 +39,7 @@ line-length = 100
 packages = ["."]
 
 [tool.uv.sources]
-loop-spec-py = { path = "../loop-spec/python" }
+loop-spec-py = { git = "https://github.com/witt3rd/loop-spec", subdirectory = "python" }
 
 [dependency-groups]
 dev = [
