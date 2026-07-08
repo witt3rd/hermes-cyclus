@@ -281,7 +281,7 @@ def _file_action(action: str, args: dict) -> str:
                 "status": info["status"] if info else None,
                 "state_path": info["state_path"] if info else None,
                 "worker_note": (
-                    "File backend: fire worker via delegate_task with cyclus-ralph skill. "
+                    "File backend: fire worker via delegate_task with cyclus-loop skill. "
                     "Kanban/Saturate: backend fires automatically on post."
                 ),
             })
@@ -312,7 +312,7 @@ CYCLUS_QUEUE_SCHEMA = {
             },
             "mode": {
                 "type": "string",
-                "description": "Mode name: ralph, ralplan, deep-research, autopilot, etc. Required.",
+                "description": "Mode name: loop, plan, research, interview, triage, autopilot, etc. Required.",
             },
             "instance_id": {
                 "type": "string",
