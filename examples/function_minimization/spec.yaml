@@ -1,16 +1,22 @@
 kind: MetricOptimizationKind
 name: function_minimization
-level: L1
+level: L2
 direction: higher_is_better
 metric: combined_score
-baseline: 1.42
+baseline: 1.404
 terminal:
-  target_score: 1.3
-  max_iterations: 100
-  plateau_count: 10
+  target_score: 1.49
+  max_iterations: 20
+  plateau_count: 5
 evaluate: |
   cd examples/function_minimization && \
     pip install -q numpy scipy && \
     python3 code/evaluator.py
+correctness: |
+  uv run pytest tests/ -q
 target_files:
   - examples/function_minimization/code/initial_program.py
+executor:
+  type: hermes
+  profile: forge
+output_dir: .cyclus/state/kanban--function-minimization/
