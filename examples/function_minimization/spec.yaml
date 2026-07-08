@@ -9,11 +9,11 @@ terminal:
   max_iterations: 20
   plateau_count: 5
 evaluate: |
-  cd /home/dt/src/witt3rd/cyclus/examples/function_minimization && \
+  cd examples/function_minimization && \
     pip install -q numpy scipy && \
     python3 code/evaluator.py
 correctness: |
-  cd /home/dt/src/witt3rd/cyclus && uv run pytest tests/ -q
+  uv run pytest tests/ -q
 target_files:
   - examples/function_minimization/code/initial_program.py
 executor:

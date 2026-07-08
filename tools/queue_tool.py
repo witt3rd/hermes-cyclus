@@ -1,5 +1,5 @@
 """
-cyclus_queue tool — backend-agnostic six-operation interface.
+cyclus_queue tool — backend-agnostic eight-operation interface.
 
 Backend detection (in priority order):
   1. Kanban  — HERMES_KANBAN_TASK env var set; kanban_* toolset active
@@ -12,8 +12,37 @@ Skills call cyclus_queue and never touch backend APIs directly.
 import json
 import logging
 import os
+from typing import Any
 
 log = logging.getLogger(__name__)
+
+# Max chars of state payload posted to a Kanban comment to avoid leaks / size limits
+_KANBAN_STATE_COMMENT_MAX = 1000
+
+# Fields allowed in a Kanban state comment (allowlist to prevent leaking sensitive data)
+_KANBAN_STATE_ALLOWLIST = {
+    "iteration", "best_score", "plateau_count", "foreclosed", "lessons",
+    "current_coverage", "best_coverage", "iteration_count", "status",
+    "turn", "phase", "round", "files_improved", "target",
+}
+
+
+def _redact_state(state: dict) -> dict:
+    """Return a copy of state with only allowlisted keys, values truncated."""
+    out = {}
+    for k, v in state.items():
+        if k not in _KANBAN_STATE_ALLOWLIST:
+            continue
+        if isinstance(v, str) and len(v) > 200:
+            v = v[:200] + "…"
+        elif isinstance(v, list):
+            trimmed = v[:10]
+            trimmed = [s[:200] + "…" if isinstance(s, str) and len(s) > 200 else s for s in trimmed]
+            if len(v) > 10:
+                trimmed.append("…")
+            v = trimmed
+        out[k] = v
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -29,6 +58,25 @@ def _active_backend() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Shared validation
+# ---------------------------------------------------------------------------
+
+def _validate_state(state: Any) -> str | None:
+    """Return an error string if state is invalid, else None."""
+    if state is None:
+        return "state is required for action=write_state"
+    if not isinstance(state, dict):
+        return "state must be an object for action=write_state"
+    return None
+
+def _validate_terminal(terminal: Any) -> str | None:
+    """Return an error string if terminal_state is invalid, else None."""
+    if not terminal:
+        return "terminal_state is required for action=complete"
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Kanban backend — delegates to kanban_* toolset via Hermes context
 # ---------------------------------------------------------------------------
 
@@ -40,7 +88,6 @@ def _kanban_action(action: str, args: dict, kanban_ctx) -> str:
 
     match action:
         case "status":
-            # kanban_show gives us the current task state
             result = kanban_ctx.kanban_show({"task_id": task_id})
             data = json.loads(result) if isinstance(result, str) else result
             return json.dumps({
@@ -53,20 +100,30 @@ def _kanban_action(action: str, args: dict, kanban_ctx) -> str:
 
         case "write_state":
             state = args.get("state")
-            if state is None:
-                return json.dumps({"error": "state is required for action=write_state"})
-            # Kanban uses kanban_comment to record state, plus heartbeat to signal liveness
+            err = _validate_state(state)
+            if err:
+                return json.dumps({"error": err})
+            assert isinstance(state, dict)  # narrowed by _validate_state
+            # Redact to allowlist, truncate to avoid leaks / size limits
+            redacted = _redact_state(state)
+            payload = json.dumps(redacted, indent=2)
+            if len(payload) > _KANBAN_STATE_COMMENT_MAX:
+                payload = payload[:_KANBAN_STATE_COMMENT_MAX] + "\n… (truncated)"
             kanban_ctx.kanban_heartbeat({"task_id": task_id})
             kanban_ctx.kanban_comment({
                 "task_id": task_id,
-                "body": f"**state update**\n```json\n{json.dumps(state, indent=2)}\n```",
+                "body": f"**state**\n```json\n{payload}\n```",
             })
             return json.dumps({"ok": True})
 
         case "complete":
-            terminal = args.get("terminal_state", "Complete")
-            output = args.get("output", {})
-            summary = (output or {}).get("summary", terminal)
+            terminal = args.get("terminal_state")
+            err = _validate_terminal(terminal)
+            if err:
+                return json.dumps({"error": err})
+            assert isinstance(terminal, str)  # narrowed by _validate_terminal
+            output = args.get("output") or {}
+            summary = output.get("summary", terminal)
             kanban_ctx.kanban_complete({
                 "task_id": task_id,
                 "summary": summary,
@@ -75,12 +132,11 @@ def _kanban_action(action: str, args: dict, kanban_ctx) -> str:
             return json.dumps({"ok": True})
 
         case "post":
-            # In Kanban mode, the task was already created by the dispatcher.
-            # post() is a no-op — we're already inside the task.
+            # In Kanban mode the task already exists — post() is a no-op.
             return json.dumps({"task_id": task_id, "note": "kanban: task already exists"})
 
         case "claim":
-            # Already claimed by the Kanban dispatcher. Return the task context.
+            # Already claimed by the Kanban dispatcher.
             kanban_ctx.kanban_heartbeat({"task_id": task_id})
             return json.dumps({
                 "status": "claimed",
@@ -88,7 +144,6 @@ def _kanban_action(action: str, args: dict, kanban_ctx) -> str:
             })
 
         case "release":
-            # In Kanban mode, release = block (let dispatcher reclaim)
             kanban_ctx.kanban_block({
                 "task_id": task_id,
                 "reason": "dependency",
@@ -103,6 +158,17 @@ def _kanban_action(action: str, args: dict, kanban_ctx) -> str:
                 "message": args.get("reason", "cancelled"),
             })
             return json.dumps({"ok": True})
+
+        case "dispatch":
+            # In Kanban mode, dispatch is equivalent to post (no-op) — the
+            # gateway handles dispatch automatically after task creation.
+            return json.dumps({
+                "dispatched": True,
+                "task_id": task_id,
+                "mode": mode,
+                "instance_id": instance_id,
+                "note": "kanban: gateway dispatches automatically",
+            })
 
         case _:
             return json.dumps({"error": f"Kanban backend: unsupported action {action!r}"})
@@ -156,10 +222,10 @@ def _file_action(action: str, args: dict) -> str:
 
         case "write_state":
             state_data = args.get("state")
-            if state_data is None:
-                return json.dumps({"error": "state is required for action=write_state"})
-            if not isinstance(state_data, dict):
-                return json.dumps({"error": "state must be an object for action=write_state"})
+            err = _validate_state(state_data)
+            if err:
+                return json.dumps({"error": err})
+            assert isinstance(state_data, dict)  # narrowed by _validate_state
             _file_write_state(mode=mode, instance_id=instance_id, state=state_data)
             return json.dumps({"ok": True})
 
@@ -173,8 +239,10 @@ def _file_action(action: str, args: dict) -> str:
 
         case "complete":
             terminal = args.get("terminal_state")
-            if not terminal:
-                return json.dumps({"error": "terminal_state is required for action=complete"})
+            err = _validate_terminal(terminal)
+            if err:
+                return json.dumps({"error": err})
+            assert isinstance(terminal, str)  # narrowed by _validate_terminal
             _file_complete(
                 mode=mode,
                 instance_id=instance_id,
@@ -229,11 +297,10 @@ def _file_action(action: str, args: dict) -> str:
 CYCLUS_QUEUE_SCHEMA = {
     "name": "cyclus_queue",
     "description": (
-        "Cyclus work queue — backend-agnostic six-operation interface. "
+        "Cyclus work queue — backend-agnostic interface. "
         "Routes to Kanban (HERMES_KANBAN_TASK), Saturate (SATURATE_TASK), "
         "or file-based queue (default). "
-        "Actions: post | claim | release | write_state | cancel | complete | status | dispatch. "
-        "Skills write against this interface; backend is a deployment detail."
+        "Actions: post | claim | release | write_state | cancel | complete | status | dispatch."
     ),
     "parameters": {
         "type": "object",
@@ -266,7 +333,7 @@ CYCLUS_QUEUE_SCHEMA = {
             "tags": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Tags for the work item (action=post only). Use 'HUMAN_GATED' for ClarificationKind.",
+                "description": "Tags (action=post only). Use 'HUMAN_GATED' for ClarificationKind.",
             },
             "spawned_by": {
                 "type": "string",
@@ -275,7 +342,7 @@ CYCLUS_QUEUE_SCHEMA = {
             "depends_on": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "task_ids that must complete before this item is claimed (action=post only).",
+                "description": "task_ids that must complete first (action=post only).",
             },
             "heartbeat_timeout_seconds": {
                 "type": "integer",
@@ -283,7 +350,7 @@ CYCLUS_QUEUE_SCHEMA = {
             },
             "state": {
                 "type": "object",
-                "description": "Intermediate state dict (action=write_state only).",
+                "description": "Intermediate state dict (action=write_state only). Must be a JSON object.",
             },
             "reason": {
                 "type": "string",
@@ -291,7 +358,7 @@ CYCLUS_QUEUE_SCHEMA = {
             },
             "terminal_state": {
                 "type": "string",
-                "description": "Terminal state string (action=complete only). e.g. PlanComplete | ConsensusReached.",
+                "description": "Terminal state string (action=complete only; required). e.g. PlanComplete | ConsensusReached.",
             },
             "output": {
                 "type": "object",
@@ -328,16 +395,20 @@ def cyclus_queue_handler(args: dict, **kwargs) -> str:
 
     try:
         if backend == "kanban":
-            # Extract kanban tool context from kwargs (passed by Hermes tool dispatch)
             kanban_ctx = kwargs.get("ctx") or kwargs.get("kanban_ctx")
             if kanban_ctx is None:
-                # No context available — fall back to file backend
-                log.warning("cyclus_queue: Kanban env set but no ctx available; falling back to file")
-                return _file_action(action, args)
+                # No ctx available — error rather than silently side-effecting
+                # the file queue from inside a Kanban worker session.
+                return json.dumps({
+                    "error": (
+                        "HERMES_KANBAN_TASK is set but no Kanban context (ctx) was passed. "
+                        "Refusing to fall back to file backend to avoid diverging from the "
+                        "Kanban dispatcher's source of truth."
+                    )
+                })
             return _kanban_action(action, args, kanban_ctx)
 
         elif backend == "saturate":
-            # Future: Saturate backend
             return json.dumps({"error": "Saturate backend not yet implemented"})
 
         else:
