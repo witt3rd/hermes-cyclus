@@ -1,217 +1,164 @@
 # hermes-cyclus — Architecture
 
-> **Status:** Active — 2026-07-06  
-> **Companion:** [`saturate/ARCHITECTURE.md`](https://github.com/witt3rd/saturate/blob/main/ARCHITECTURE.md)
+> **Status:** Active — 2026-07-07
+> **Companion:** [`loop-spec`](https://github.com/witt3rd/loop-spec) · [`saturate`](https://github.com/witt3rd/saturate)
 
 ---
 
-## The Unified Purpose
-
-hermes-cyclus and Saturate are two halves of one arc:
+## The One-Line Summary
 
 > **Cyclus designs work. Saturate executes it. The handoff is a typed spec.**
 
-Cyclus is the deliberation layer. Its single job is one type transformation:
-
-```
-WorkSpec  →  DesignedWork
-```
-
-A `WorkSpec` is unvalidated intent — a vague goal, a description, a path to a
-spec file. `DesignedWork` is a typed loop spec that has survived deliberation:
-the goal is verifiable, the loop kind is declared, terminal states are named,
-blast radius is documented, verification level is honest.
-
-That proof is Cyclus's unique contribution. Saturate never needs to know how
-deliberation happened — it just needs a conforming typed spec.
+Cyclus is the **deliberation layer**. It validates intent into a typed loop spec
+that any execution backend can run. It does not run loops itself — it produces
+specs and manages the queue interface.
 
 ---
 
-## The Loop Taxonomy (Saturate's — Cyclus maps to it)
+## The Loop Spec (Source of Truth)
 
-The loop taxonomy is Saturate's. See
-[`saturate/ARCHITECTURE.md — The Loop Taxonomy`](https://github.com/witt3rd/saturate/blob/main/ARCHITECTURE.md)
-for the full typed definitions. Cyclus maps each skill to a Saturate loop kind:
+The canonical schema lives at [`witt3rd/loop-spec`](https://github.com/witt3rd/loop-spec).
+Cyclus depends on `loop-spec-py` for validation. Saturate depends on it for
+scheduling. Neither owns the schema.
 
-| Cyclus Skill | Saturate LoopKind | What one turn produces |
-|-----------|-------------------|------------------------|
-| **ralplan** | `ConsensusKind` | `RoundComplete \| ConsensusReached` |
-| **ralph** | `TaskExecutionKind` | `TaskPassed \| TaskFailed \| TaskBlocked \| AllTasksPassed` |
-| **deep-research** | `InformationSeekingKind` | `FindingsAdded \| Sufficient` |
-| **deep-interview** | `ClarificationKind` *(HUMAN_GATED)* | `CoverageUpdated \| HumanConfirmed` |
-| **cyclus-autoresearch** | `MetricOptimizationKind` | `Accepted \| Discarded` |
-| *(future)* | `SelectionKind` | `GenerationComplete \| Converged` |
+Six loop kinds — each has its own required fields:
 
-**`ClarificationKind.HUMAN_GATED = True`** is the structural fact that makes
-deep-interview different from every other skill: the scheduler never marks it
-terminal. Only an explicit human `complete()` call ends it. This is not a
-configuration choice or a prose rule — it is a type property.
+| Kind | Terminal condition | Cyclus skill |
+|------|--------------------|--------------|
+| `MetricOptimizationKind` | score hits target OR plateau OR max_iterations | cyclus-autoresearch |
+| `TaskExecutionKind` | all tasks pass | cyclus-ralph |
+| `ConsensusKind` | all roles APPROVE (incl. DRI) | cyclus-ralplan |
+| `InformationSeekingKind` | gap check passes | cyclus-deep-research |
+| `ClarificationKind` | human confirms (HUMAN_GATED) | cyclus-deep-interview |
+| `SelectionKind` | best candidate identified | *(future)* |
 
-Cyclus's `cyclus-loop-design` deliberation (the design skill that produces new loop
-specs) determines which kind a new spec belongs to. The kind determines
-everything else: which spec fields are required, which turn results are valid,
-which terminal states are possible.
+Maturity levels: **L1** (propose only) → **L2** (apply + confirm) → **L3** (autonomous).
+All specs start at L1. Trust is earned.
+
+`load_spec()` is the planning gate — every cyclus-ralph run validates the spec
+before parsing the plan. A `ValidationError` halts immediately.
 
 ---
 
-## The Work-Queue Interface (Four Operations)
+## Execution: The Two-Job Chain
 
-Saturate's published contract. Cyclus is a **producer** — it calls `post()`.
+This is the core execution pattern. It applies to every loop kind.
+
+```
+Proposer job                    Verifier job
+─────────────────               ─────────────────────────────────
+Does one unit of work           Receives proposer output via --context-from
+Writes to STATE.md              Reads state.json
+Triggers Verifier               Checks terminal conditions:
+                                  DONE  → stop, report final result
+                                  NOT DONE → triggers Proposer
+```
+
+**The verifier is the loop controller.** It is the only agent with full
+information: the eval result, the state history, and the terminal conditions.
+It decides whether to stop or continue.
+
+**Self-triggering via `cronjob(action='run', job_id=...)`** — no clock drives
+the loop. Each agent triggers the next immediately before exiting. The cron
+schedule is only for the initial launch.
+
+**`--context-from`** wires the proposer's stdout into the verifier's prompt.
+The verifier sees what the proposer produced without any extra infrastructure.
+
+This pattern is universal across all loop kinds and all three backends.
+
+---
+
+## Execution Backends
+
+Three backends, one interface. Skills are written against the interface —
+a backend swap is a config change, not a skill rewrite.
+
+| Backend | When | Mechanism |
+|---------|------|-----------|
+| **File-based** | Always; zero config; NFS-safe | Atomic `os.rename()` across `pending/` → `active/` → `done/`. No database, no WAL. Works on Azure Files, NFS, any filesystem. |
+| **Kanban** | Hermes v0.18.0+ | Native Hermes durable board. `kanban_create/next/comment/complete` implement the four operations. HITL gates via `kanban_block`. |
+| **Saturate** | When configured | Distributed fleet. PostgreSQL `SELECT FOR UPDATE SKIP LOCKED` for concurrent workers. The production backend for N parallel workers. |
+
+**Why not SQLite for Tier 1?** WAL mode corrupts on NFS — the exact reason
+Hermes users on Azure Files disable Kanban. Atomic file renames are NFS-safe
+by POSIX guarantee.
+
+---
+
+## The Four-Operation Interface
+
+```
+post(spec, submitted_by)     →  ScheduledTask
+claim()                      →  Option[ClaimedTask]
+write_state(task, state)     →  ActiveTask
+complete(task, output)       →  TerminalTask
+```
+
+Cyclus is a **producer** — it calls `post()`.
 Workers call `claim()`, `write_state()`, `complete()`.
 
-```
-post(spec: DesignedWork, submitted_by: Attribution)  →  ScheduledTask
-claim()                                              →  Option[ClaimedTask]
-write_state(task: ClaimedTask, state: LoopState)     →  ActiveTask
-complete(task: ClaimedTask, output: LoopOutput)      →  TerminalTask
-```
+The worker never knows which backend it's talking to.
 
-The worker does not know whether it is talking to the Cyclus internal queue,
-Kanban, or Saturate's distributed fabric. That is the whole interface.
-
-**Serial and parallel are scheduling properties, not architectural categories.**
-`depends_on` expresses serial constraints. No `depends_on` = freely parallel.
+**Push model — not pull.** The dispatcher hands work to workers via
+`delegate_task`. Workers do not poll. `claim()` is called by the dispatcher
+on behalf of the worker, not by the worker itself.
 
 ---
 
-## Execution Backends (Progressive)
+## State Persistence
 
-Saturate's interface is the contract. Three concrete backends implement it,
-each adding capability without requiring skill rewrites:
+Runtime state lives in `.cyclus/` — committed to the user's project repo
+following the `.omh/` pattern:
 
-| Backend | When | What it provides |
-|---------|------|-----------------|
-| **File-based** | Always works; zero config; NFS-safe | Atomic directory operations — `pending/`, `active/`, `done/` subdirs; `claim()` = `os.rename()`; no database, no WAL, no journal; works on Azure Files, NFS, any filesystem |
-| **Kanban** (Hermes v0.18.0) | If Hermes Kanban is enabled | Native Hermes durable board; `kanban_create/next/comment/complete` implement the four operations; HITL gates via `kanban_block`; visual surface on top of the same file semantics |
-| **Saturate** | When configured | Distributed fleet; PostgreSQL with `SELECT FOR UPDATE SKIP LOCKED` for concurrent workers; multi-node; the production backend for N parallel workers |
+```
+.cyclus/
+  plans/          ← committed (durable artifacts: plans, specs)
+  queue/
+    pending/      ← gitignored (runtime JSON)
+    active/       ← gitignored (runtime JSON)
+    done/         ← gitignored (runtime JSON)
+  state/          ← gitignored (per-loop state.json, turns.jsonl)
+```
 
-**Why not SQLite for Tier 1?** SQLite WAL mode corrupts on NFS-mounted
-filesystems — the exact reason Hermes users on Azure Files or shared mounts
-disable Kanban. Since Cyclus's primary target is Hermes (which frequently runs
-on NFS-backed storage), SQLite is the wrong Tier 1 foundation. Atomic file
-renames are NFS-safe by POSIX guarantee.
+`.cyclus/.gitignore` excludes runtime state. Plans are tracked.
 
-Cyclus detects which backend is available at runtime. The skill prose is written
-against the four-operation interface — a backend swap is a configuration change,
-not a skill rewrite.
+`STATE.md` lives in the user's `--workdir`. It is **never** committed to the
+Cyclus plugin repo — it is the user's project state.
 
 ---
 
-## Hermes-Native Loop Patterns
+## Cyclus Skills → Loop Kinds
 
-Cyclus is Hermes-native. The full loop engineering stack runs on Hermes
-primitives with no extra infrastructure:
-
-| Loop primitive | Hermes mechanism |
-|---|---|
-| Scheduling / heartbeat | `hermes cron create "0 7 * * 1-5" --skill cyclus-ralph --workdir "$PWD"` |
-| Run-until-done | Two cron jobs chained via `hermes cron edit --context-from <upstream-id>` |
-| Worktrees | `git worktree` inside the cron job; `--workdir` pins per-job cwd |
-| Skills | `SKILL.md` under `~/.hermes/skills/` or project `.hermes/skills/` |
-| Sub-agents (maker/checker) | `delegate_task(role='leaf', toolsets=[...])` |
-| State/memory | `STATE.md` in `--workdir`; `hermes memory` for cross-session facts |
-| Channel delivery | `--deliver telegram\|slack\|local` on any cron job |
-
-### The `--context-from` chain (L2 maker/checker split)
-
-```bash
-# Proposer: one cyclus-ralph turn, writes proposed diff to STATE.md
-PROPOSER=$(hermes cron create "0 7 * * 1-5" \
-  --name "cyclus-ralph proposer" --skill cyclus-ralph \
-  --workdir "$PWD" --deliver local \
-  "Run one turn. Write proposed patch as fenced diff. Update STATE.md. Do not apply." \
-  | tail -1)
-
-# Verifier: receives proposer stdout, applies patch in worktree, runs eval
-hermes cron create "5 7 * * 1-5" \
-  --name "cyclus-ralph verifier" --skill cyclus-ralph-driver \
-  --workdir "$PWD" --deliver local \
-  "Apply injected patch in isolated worktree. Run eval. Commit if improved. Update STATE.md."
-
-hermes cron edit <verifier-id> --context-from "$PROPOSER"
-```
-
-The upstream job's stdout is injected into the downstream prompt on every tick.
-No new infrastructure — this is `--context-from` doing inter-job pipeline.
-
-### L1 defaults (always start here)
-
-All `spec.md` files default to `level: L1` until trust is earned:
-
-- `--deliver local` — output stays in `~/.hermes/cron/output/`, not in any channel
-- Workers write proposed diffs to `write_state()` only — nothing touches the repo
-- Human reads `STATE.md` and local output before enabling L2
-- Kill switch: set `loop-pause-all: true` in `STATE.md` and the skill short-circuits
-
-**Anti-pattern #4 (Greyling):** L3 before L1 quality. Never auto-commit until
-the eval command, baseline score, and improvement direction are confirmed correct.
-
----
-
-## The Typed Spec: The Handoff File
-
-Cyclus's `cyclus-loop-design` deliberation produces a typed YAML spec for the
-declared loop kind. The spec is Saturate's input — read-only during execution.
-
-Each kind has its own required fields. A `ConsensusSpec` carries `roles` and
-`consensus_fn`; a `MetricOptimizationSpec` carries `metric` and `correctness`.
-There is no generic loop spec — the kind determines the schema.
-
-```yaml
-# Example: MetricOptimizationSpec (cyclus-autoresearch)
-kind:           metric-optimization
-goal:           Reduce CI build time by at least 20%
-metric:
-  command:      npm run build
-  extract:      wall_clock
-  direction:    minimize
-correctness:
-  command:      npm test
-max_turns:      100
-budget_tokens:  500000
-stagnation_n:   10
-memory:         ./output/build-optimizer/
-```
-
-```yaml
-# Example: ConsensusSpec (ralplan)
-kind:          consensus
-goal:          Produce an implementation plan for X
-roles:         [planner, architect, critic]
-consensus_fn:  all-approve
-max_rounds:    3
-memory:        .omh/plans/
-```
-
-A spec without all required fields for its kind is not schedulable.
-The `cyclus-loop-design` deliberation enforces this before handoff.
+| Skill | Loop kind | What one turn produces |
+|-------|-----------|------------------------|
+| cyclus-ralph | `TaskExecutionKind` | `TaskPassed \| TaskFailed \| TaskBlocked \| AllTasksPassed` |
+| cyclus-ralplan | `ConsensusKind` | `RoundComplete \| ConsensusReached` |
+| cyclus-deep-research | `InformationSeekingKind` | `FindingsAdded \| Sufficient` |
+| cyclus-deep-interview | `ClarificationKind` *(HUMAN_GATED)* | `CoverageUpdated \| HumanConfirmed` |
+| cyclus-autoresearch | `MetricOptimizationKind` | `Accepted \| Discarded` |
 
 ---
 
 ## The Forward Arc
 
 ```
-Cyclus v18.0.0   Retire bespoke plumbing (omh_state, omh_delegate, hooks)
-              Skills written against the four-operation interface
-              Cyclus internal queue as default backend; Kanban if enabled
+loop-spec v0.1   Schema + Python reference implementation (shipped)
+                 executor, output_dir, evaluate_extract, correctness, plan_path
 
-Cyclus v18.1.0   Complete Python deletion; all skills fully re-grounded
+Cyclus v18.0.0   File-based queue, typed specs, load_spec() planning gate (shipped)
+                 Depends on loop-spec-py via git URL
 
-Cyclus v18.x     Arc 1 — cyclus_measure (MetricOptimizationKind measurement primitive)
-              Arc 2 — cyclus-autoresearch (first MetricOptimizationKind skill)
-              Arc 3 — cyclus-loop-design (deliberation that produces typed specs)
+Cyclus v18.x     Arc 1 — cyclus_measure (MetricOptimizationKind eval primitive)
+                 Arc 2 — cyclus-autoresearch (first MetricOptimizationKind skill)
+                 Arc 3 — cyclus-loop-design (deliberation → typed spec)
 
-Saturate      The Tier 3 backend — typed loop execution at fleet scale
-              Implements the four-operation interface over SQLite → PostgreSQL → Nomad
+Saturate         Tier 3 backend — fleet execution at scale
+                 Implements the four-operation interface over PostgreSQL
 
-Continuum     The cognitive presence that surveys the Saturate fleet,
-              identifies what to spawn next, directs long-horizon work
+Continuum        Cognitive presence — surveys the Saturate fleet,
+                 identifies what to spawn next, directs long-horizon work
 ```
-
-The three projects compose without coupling:
-- Cyclus produces typed specs; Saturate runs them; Continuum directs the fleet
-- Each communicates through files and the four-operation queue interface
-- None needs to know how the others are built
 
 ---
 
