@@ -18,15 +18,15 @@ coverage.json
 htmlcov/
 .tox/
 
-# Cyclus runtime state (project-local, not committed)
-.cyclus/queue/pending/*.json
-.cyclus/queue/active/*.json
-.cyclus/queue/done/*.json
-.cyclus/state/*/
-!.cyclus/state/.gitkeep
+# Cyclus runtime state — never committed; lives only on the running machine
+.cyclus/
 
 # OMH legacy runtime state
 .omh/
+
+# Human-readable loop summaries — generated, not source of truth
+STATE.md
+LOOP.md
 
 # IDE
 .idea/
