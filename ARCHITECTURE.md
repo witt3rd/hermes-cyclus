@@ -55,115 +55,147 @@ rejected by the validator — the spec is machine-agnostic.
 Every backend — Kanban, file-based, Saturate — implements the same pattern:
 
 ```
-1. DISPATCH   Dispatcher posts a task (loop spec + state path) and assigns it to a worker
-2. WORK       Worker runs as fast as inference allows, iterating until terminal or timeout
+1. DISPATCH   Dispatcher assigns a task (loop spec + state path) to one or more workers
+2. WORK       Worker(s) run as fast as inference allows, doing iterations
 3. COMPLETE   Worker calls complete() with result — loop is done
    OR
-3. TIMEOUT    Dispatcher detects stale task, reclaims it, re-dispatches to a new worker
+3. TIMEOUT    Dispatcher detects stale worker, reclaims the task, dispatches a new worker
               New worker reads state, continues from where the last one stopped
 ```
 
-This is how we saturate compute:
-- The worker never idles waiting for a clock
-- If the worker times out, the dispatcher immediately re-dispatches
-- State persists across worker boundaries — each new worker picks up where the last left off
-- The dispatcher is the loop controller, not the worker
+**The dispatcher is the loop controller, not the worker.**
+**The worker's only job:** do as much work as possible before context runs out, write state.
+**The dispatcher's only job:** keep a worker on every active task; reclaim immediately on timeout.
 
-**The worker's only job:** do as much work as possible before context runs out,
-write state, call `complete()` if terminal or let the dispatcher reclaim if not.
+---
 
-**The dispatcher's only job:** keep a worker assigned to every active task.
-When a worker finishes or times out, dispatch the next one immediately.
+## Two Worker Topologies
+
+### Serial (single worker)
+
+One worker at a time. Dispatcher assigns the task, worker iterates, exits or times out,
+dispatcher re-assigns. State accumulates across worker boundaries via state_path.
+
+Best for: `TaskExecutionKind`, `ConsensusKind`, `ClarificationKind` — loops where
+each turn builds on the previous one and parallelism doesn't help.
+
+```
+Dispatcher → Worker 1 (iterates, times out) → Worker 2 (reads state, continues) → ... → DONE
+```
+
+### Swarm (parallel workers + verifier)
+
+N workers run simultaneously, each trying a different hypothesis. A verifier/synthesizer
+picks the best result and advances the baseline. Loop continues with the winner.
+
+Best for: `MetricOptimizationKind`, `SelectionKind` — loops where hypotheses are
+independent and trying many simultaneously is faster than trying them serially.
+
+```
+               ┌─ Worker A (hypothesis α) ─┐
+Dispatcher ────┼─ Worker B (hypothesis β) ─┼──► Verifier/Synthesizer ──► best result → baseline
+               └─ Worker C (hypothesis γ) ─┘    (discards losers, commits winner)
+```
+
+Swarm is not a different architecture — it is the serial pattern with `N > 1` at
+the dispatch step. The verifier is the loop controller in both topologies.
 
 ---
 
 ## Kanban as the Reference Implementation
 
-Kanban (Hermes v0.18.0+) is the first backend because the dispatcher is built in.
-The Kanban gateway dispatcher runs continuously, handles reclaim automatically,
-and `goal_mode=True` gives us the loop-until-done semantic natively.
+Kanban (Hermes v0.18.0+) is the first backend. The dispatcher is built in
+(gateway process), handles reclaim automatically, and `goal_mode=True` gives
+loop-until-done semantics natively.
 
-### How a Cyclus loop runs on Kanban
+### Serial loop on Kanban
 
-```python
-# 1. Post the task (Cyclus producer)
+```bash
 hermes kanban create \
-  --title "function-minimization: optimize combined_score to 1.49" \
-  --body "spec: examples/function_minimization/spec.yaml\nstate: .cyclus/state/..." \
+  --title "function-minimization: optimize to 1.49" \
+  --body "spec: examples/function_minimization/spec.yaml" \
   --assignee forge \
-  --goal-mode          # judge checks terminal condition after every turn
-
-# 2. Dispatcher assigns to worker (automatic — Kanban gateway)
-# Worker profile has cyclus-autoresearch skill loaded
-
-# 3. Worker iterates (cyclus-autoresearch skill drives the loop)
-#    - reads state from state_path
-#    - runs eval, applies hypothesis, commits or reverts
-#    - writes updated state
-#    - calls kanban_heartbeat() to signal liveness
-#    - when terminal: calls kanban_complete(summary=..., metadata={final_score: ...})
-
-# 4. If worker times out before terminal:
-#    - Kanban reclaims after dispatch_stale_timeout_seconds (default 4h, set lower for fast loops)
-#    - New worker picks up — reads state, continues
+  --goal-mode
 ```
+
+Worker profile has the appropriate cyclus skill loaded. When the worker times out,
+Kanban reclaims and re-dispatches automatically.
+
+### Swarm on Kanban
+
+```bash
+hermes kanban swarm  # creates root + N parallel workers + gated verifier
+```
+
+This creates a full swarm graph: root orchestrator, parallel workers each trying
+a different hypothesis, gated verifier that picks the best result, synthesizer
+that commits the winner and updates the baseline. The verifier gate ensures only
+one result advances before the next swarm generation begins.
 
 ### Key Kanban config for fast loops
 
 ```yaml
 kanban:
-  dispatch_stale_timeout_seconds: 600  # reclaim after 10 min (match agent timeout)
-  dispatch_interval_seconds: 10        # check for stale tasks every 10s
+  dispatch_stale_timeout_seconds: 600   # reclaim after 10 min (match agent timeout)
+  dispatch_interval_seconds: 10         # check for stale tasks every 10s
 ```
 
-With these settings, a timed-out worker is reclaimed and re-dispatched within
-10 seconds. Zero idle time between worker runs.
+With these settings, a timed-out worker is reclaimed and re-dispatched within 10
+seconds. Near-zero idle time between worker runs.
 
 ### What the worker skill does
 
-The cyclus skill (cyclus-ralph, cyclus-autoresearch, etc.) loaded on the worker:
-1. Calls `kanban_show` to read the task body (spec path, state path)
-2. Reads state from state_path
+The cyclus skill loaded on the worker:
+1. Calls `kanban_show` — reads task body (spec path, state path)
+2. Reads state from state_path — picks up where last worker stopped
 3. Checks terminal conditions — if done, calls `kanban_complete()` and exits
-4. Otherwise: does one or more iterations, writing state after each
+4. Otherwise: iterates as fast as possible, writing state after each iteration
 5. Calls `kanban_heartbeat()` periodically to prevent premature reclaim
-6. If approaching context limit: writes state, exits cleanly (Kanban reclaims)
+6. Approaching context limit: writes state cleanly, exits — Kanban reclaims
 
 ### HITL gates
 
 ```python
 kanban_block(reason="needs_input",
-             message="Score plateau at 1.44 after 8 iterations. Try a different algorithm family?")
-# Human comments, unblocks
-# Dispatcher re-dispatches with human context injected
+             message="Plateau at 1.44 after 8 iterations. Try a different algorithm family?")
+# Human comments, unblocks — dispatcher re-dispatches with context injected
 ```
 
 ---
 
 ## File-Based and Saturate: Same Pattern, Different Dispatcher
 
-The worker skill is **identical** across all three backends. The difference is
-only in what drives the dispatch loop:
+The worker skill is **identical** across all three backends. Only the dispatcher differs.
 
-| Backend | Dispatcher | Reclaim mechanism |
-|---------|------------|-------------------|
-| **Kanban** | Hermes gateway (built-in) | `dispatch_stale_timeout_seconds` — automatic |
-| **File-based** | Orchestrating `delegate_task` call | Parent agent re-dispatches after child returns |
-| **Saturate** | Saturate runner process | Saturate scheduler detects stale tasks and re-queues |
+| Backend | Dispatcher | Serial reclaim | Swarm |
+|---------|------------|----------------|-------|
+| **Kanban** | Hermes gateway (built-in) | `dispatch_stale_timeout_seconds` — automatic | `hermes kanban swarm` |
+| **File-based** | Parent `delegate_task` agent | Parent re-dispatches after child returns | Parent dispatches N children in parallel batch, collects best |
+| **Saturate** | Saturate scheduler process | Heartbeat timeout → re-queue → re-dispatch | `BatchKind` tasks with `SpawnPolicy` — N parallel `MetricOptimizationKind` workers + synthesizer |
 
-For **file-based**, the orchestrator is a simple agent that:
-1. Calls `queue.post(spec)` 
-2. Calls `delegate_task(worker, context=task)` — blocks until worker returns
-3. Reads result — if not terminal, calls `queue.post(spec)` again and repeats
-4. When terminal: stops
+### Saturate swarm via BatchKind
 
-For **Saturate**, the Saturate scheduler IS the dispatcher — it runs continuously,
-claims tasks from the queue (SQLite for Arc 1, PostgreSQL for Arc 2+), spawns workers,
-and re-queues stale tasks. The spec must include a `repo` git URL; the runner clones it
-into an isolated worktree and scopes all hypothesis commits/reverts there — the Saturate
-source tree is never touched.
+Saturate's `BatchKind` is the swarm primitive. A `BatchKind` task fans out to N
+child `MetricOptimizationKind` workers (each with a different hypothesis seed),
+collects results via `depends_on` edges, and a synthesizer worker picks the winner.
 
-The worker skill never needs to know which dispatcher is driving it.
+```python
+# Producer posts a BatchKind task
+queue.post(BatchSpec(
+    workers=N,
+    child_kind=MetricOptimizationKind,
+    child_spec=spec,
+    synthesizer=SynthesizerSpec(strategy="best_metric"),
+))
+# Saturate scheduler spawns N child tasks automatically via SpawnPolicy
+```
+
+The `spawn` field in `MetricOptimizationSpec` declares whether a loop may
+spawn child loops (e.g., when stagnated: try N parallel hypotheses, restart
+from best). This is how a serial loop graduates to swarm when it gets stuck.
+
+The worker skill never needs to know whether it is in a serial or swarm topology.
+The spec and state_path are the same either way.
 
 ---
 
