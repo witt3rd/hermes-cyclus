@@ -2,6 +2,11 @@
 
 > **Status:** Active — 2026-07-07
 > **Companion:** [`loop-spec`](https://github.com/witt3rd/loop-spec) · [`saturate`](https://github.com/witt3rd/saturate)
+>
+> **Co-design:** Cyclus, loop-spec, and Saturate evolve together. loop-spec is the
+> shared contract — neither Cyclus nor Saturate owns it. When a new field is needed,
+> it lands in loop-spec first; both consumers adopt it. Changes may land in any repo
+> in any turn depending on where the seam is.
 
 ---
 
@@ -37,6 +42,11 @@ All specs start at L1. Trust is earned.
 
 `load_spec()` is the planning gate — every cyclus-ralph run validates the spec
 before parsing the plan. A `ValidationError` halts immediately.
+
+**`repo` field** — specs that commit/revert hypotheses (MetricOptimizationKind,
+TaskExecutionKind) declare the target as a git URL (`https://`, `git@`, `file://`).
+The execution fabric clones it into an isolated worktree. Absolute local paths are
+rejected by the validator — the spec is machine-agnostic.
 
 ---
 
@@ -147,8 +157,11 @@ For **file-based**, the orchestrator is a simple agent that:
 3. Reads result — if not terminal, calls `queue.post(spec)` again and repeats
 4. When terminal: stops
 
-For **Saturate**, the Saturate runner IS the dispatcher — it runs continuously,
-claims tasks from the PostgreSQL queue, spawns workers, and re-queues on timeout.
+For **Saturate**, the Saturate scheduler IS the dispatcher — it runs continuously,
+claims tasks from the queue (SQLite for Arc 1, PostgreSQL for Arc 2+), spawns workers,
+and re-queues stale tasks. The spec must include a `repo` git URL; the runner clones it
+into an isolated worktree and scopes all hypothesis commits/reverts there — the Saturate
+source tree is never touched.
 
 The worker skill never needs to know which dispatcher is driving it.
 
@@ -163,7 +176,7 @@ a backend swap is a config change, not a skill rewrite.
 |---------|------|-----------|
 | **File-based** | Always; zero config; NFS-safe | Atomic `os.rename()` across `pending/` → `active/` → `done/`. No database, no WAL. Works on Azure Files, NFS, any filesystem. |
 | **Kanban** | Hermes v0.18.0+ | Native Hermes durable board. `kanban_create/next/comment/complete` implement the four operations. HITL gates via `kanban_block`. |
-| **Saturate** | When configured | Distributed fleet. PostgreSQL `SELECT FOR UPDATE SKIP LOCKED` for concurrent workers. The production backend for N parallel workers. |
+| **Saturate** | When configured | Distributed fleet. SQLite queue (file-based, NFS-safe) for Arc 1; PostgreSQL `SELECT FOR UPDATE SKIP LOCKED` for Arc 2+ concurrent fleet workers. Implements the full four-operation interface. |
 
 **Why not SQLite for Tier 1?** WAL mode corrupts on NFS — the exact reason
 Hermes users on Azure Files disable Kanban. Atomic file renames are NFS-safe
@@ -188,6 +201,13 @@ The worker never knows which backend it's talking to.
 **Push model — not pull.** The dispatcher hands work to workers via
 `delegate_task`. Workers do not poll. `claim()` is called by the dispatcher
 on behalf of the worker, not by the worker itself.
+
+**The judge gap.** For `MetricOptimizationKind`, Saturate's `correctness` field
+is a shell command (exit 0 = pass). For Kanban `goal_mode`, acceptance criteria
+can be a reasoning judgment evaluated by an auxiliary judge after each turn. These
+are not equivalent. Saturate Arc 2 will need a judge executor step — either a
+Hermes invocation or a structured LLM call — to reach full parity with Kanban
+goal-mode for tasks where "done" requires semantic evaluation, not just a test exit code.
 
 ---
 
@@ -231,6 +251,9 @@ Cyclus plugin repo — it is the user's project state.
 loop-spec v0.1   Schema + Python reference implementation (shipped)
                  executor, output_dir, evaluate_extract, correctness, plan_path
 
+loop-spec v0.2   repo: git URL field — machine-agnostic target declaration (shipped)
+                 Absolute paths rejected by validator
+
 Cyclus v18.0.0   File-based queue, typed specs, load_spec() planning gate (shipped)
                  Depends on loop-spec-py via git URL
 
@@ -238,8 +261,12 @@ Cyclus v18.x     Arc 1 — cyclus_measure (MetricOptimizationKind eval primitive
                  Arc 2 — cyclus-autoresearch (first MetricOptimizationKind skill)
                  Arc 3 — cyclus-loop-design (deliberation → typed spec)
 
-Saturate         Tier 3 backend — fleet execution at scale
-                 Implements the four-operation interface over PostgreSQL
+Saturate Arc 1   SQLite queue, runner/executor/scheduler primitives (shipped)
+                 repo field: clones git URL into isolated worktree per task
+                 loop-spec conformant: load_spec(), ExecutorSpec, TerminalConditions
+
+Saturate Arc 2   PostgreSQL SELECT FOR UPDATE SKIP LOCKED — concurrent fleet workers
+                 Judge executor step — semantic acceptance criteria beyond exit codes
 
 Continuum        Cognitive presence — surveys the Saturate fleet,
                  identifies what to spawn next, directs long-horizon work
