@@ -1,11 +1,13 @@
 # EVOLVE-BLOCK-START
 """Function minimization example for OpenEvolve"""
 import numpy as np
+from scipy.optimize import differential_evolution
 
 
 def search_algorithm(iterations=1000, bounds=(-5, 5)):
     """
-    A simple random search algorithm that often gets stuck in local minima.
+    Uses multiple differential evolution runs + L-BFGS-B polish for reliable
+    global optimization.
 
     Args:
         iterations: Number of iterations to run
@@ -14,20 +16,36 @@ def search_algorithm(iterations=1000, bounds=(-5, 5)):
     Returns:
         Tuple of (best_x, best_y, best_value)
     """
-    # Initialize with a random point
-    best_x = np.random.uniform(bounds[0], bounds[1])
-    best_y = np.random.uniform(bounds[0], bounds[1])
-    best_value = evaluate_function(best_x, best_y)
+    search_bounds = [(bounds[0], bounds[1]), (bounds[0], bounds[1])]
 
-    for _ in range(iterations):
-        # Simple random search
-        x = np.random.uniform(bounds[0], bounds[1])
-        y = np.random.uniform(bounds[0], bounds[1])
-        value = evaluate_function(x, y)
+    def obj(xy):
+        return evaluate_function(xy[0], xy[1])
 
-        if value < best_value:
-            best_value = value
-            best_x, best_y = x, y
+    best_result = None
+    best_val = np.inf
+
+    # Derive number of runs and maxiter from iterations parameter
+    n_runs = max(1, iterations // 400)
+    maxiter = max(100, iterations // n_runs)
+
+    for _ in range(n_runs):
+        result = differential_evolution(
+            obj,
+            bounds=search_bounds,
+            maxiter=maxiter,
+            tol=1e-10,
+            popsize=20,
+            mutation=(0.5, 1.5),
+            recombination=0.7,
+            polish=True,
+            strategy='best1bin',
+        )
+        if result.fun < best_val:
+            best_val = result.fun
+            best_result = result
+
+    best_x, best_y = best_result.x
+    best_value = best_result.fun
 
     return best_x, best_y, best_value
 
