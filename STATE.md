@@ -3,7 +3,7 @@
 > Durable memory across cron ticks. Read at the start of every loop run.
 > Updated by the loop. Human reviews weekly.
 
-**Last run:** —  
+**Last run:** 2026-07-07 17:18 PDT (function-minimization, iteration 1)  
 **Kill switch:** `loop-pause-all: false`
 
 ---
@@ -20,10 +20,10 @@
 
 | Loop | Pattern | Level | Status |
 |------|---------|-------|--------|
-| function-minimization | MetricOptimizationKind | L1 | 🔲 not started |
+| function-minimization | MetricOptimizationKind | L1 | 🔄 iteration 1 complete |
 | test-coverage | MetricOptimizationKind | L1 | 🔲 not started |
-| queue-rewrite (issue #5) | TaskExecutionKind | L1 | ✅ complete (branch fix/5-file-based-queue) |
-| **spec-yaml-pydantic-gate (issue #7)** | **TaskExecutionKind** | **L1** | **🔄 designed, ready to dispatch** |
+| queue-rewrite (issue #5) | TaskExecutionKind | L1 | ✅ complete |
+| spec-yaml-pydantic-gate (issue #7) | TaskExecutionKind | L1 | ✅ complete |
 
 ## Current mode (declared 2026-07-07 07:30 PDT)
 
@@ -43,9 +43,11 @@ Designed via: cyclus-loop-design (meta-loop, Round 1 consensus)
 
 ## Loop Run Log
 
-| Date | Loop | Turns | Best Score | Outcome |
-|------|------|-------|-----------|---------|
-| — | — | — | — | — |
+| Date | Loop | Score | Proposal | Outcome |
+|------|------|-------|----------|---------|
+| 2026-07-07 | function-minimization | 1.404 (avg of 3 runs) | Replace naive random search with `scipy.optimize.differential_evolution`. Projected score ~1.499. Verified empirically: 5/5 runs converged to global min (-1.7041, 0.6775). | Pending DRI review — proposal in cron output `5f41d4dfdcbf/2026-07-07_17-21-43.md` |
+
+**Note (iteration 1 bug):** Agent wrote to `examples/function_minimization/STATE.md` instead of repo root `STATE.md`. Prompt corrected — next tick writes here.
 
 ---
 
