@@ -1,5 +1,5 @@
 ---
-name: cyclus-deep-interview
+name: cyclus-interview
 description: Socratic reqs interview; clarify vague/ambiguous goals
 version: 2.0.0
 metadata:
@@ -20,11 +20,11 @@ metadata:
 ## When to Use
 
 - The goal is vague, underspecified, or could be interpreted multiple ways
-- Before planning (cyclus-ralplan) or implementation on non-trivial work
+- Before planning (cyclus-plan) or implementation on non-trivial work
 - The user says: "deep interview", "requirements", "what should we build", "help me think through this"
-- cyclus-ralplan determines the goal is too ambiguous to plan
+- cyclus-plan determines the goal is too ambiguous to plan
 - You're unsure what the user actually wants
-- **Domain unfamiliarity:** if the goal requires external knowledge of an unfamiliar domain, suggest running `cyclus-deep-research` first to gather context, then resume the interview with the confirmed report as input.
+- **Domain unfamiliarity:** if the goal requires external knowledge of an unfamiliar domain, suggest running `cyclus-research` first to gather context, then resume the interview with the confirmed report as input.
 
 ## When NOT to Use
 
@@ -57,7 +57,7 @@ Before starting a new interview:
 4. If abandoning: write `{"status": "abandoned", ...}` to `write_file(".omh/state/interview--{id}.json", json.dumps({...status: "abandoned"...}))`, then proceed to Phase 1 with a NEW id
 5. If no active state found: proceed to Phase 1
 6. Concurrent interviews on different projects are permitted; do not block.
-6. **Check for existing research context (cyclus-deep-research sentinel):**
+6. **Check for existing research context (cyclus-research sentinel):**
    if any `.omh/research/*-report.md` exists with frontmatter
    `status: confirmed`, mention it to the user as available context for
    the interview (e.g., "I see a confirmed research report on '{topic}'
@@ -185,7 +185,7 @@ Handle each response:
 **On confirm**:
 - Update spec frontmatter: `status: confirmed`
 - Update state: `status: confirmed`
-- Tell the user: "Spec confirmed and saved to {path}. You can now use `cyclus-ralplan` to create an implementation plan from this spec."
+- Tell the user: "Spec confirmed and saved to {path}. You can now use `cyclus-plan` to create an implementation plan from this spec."
 
 **On request changes**:
 - Ask targeted follow-up questions about the specific sections the user wants changed
@@ -219,7 +219,7 @@ Log events and decisions only — NOT conversation content.
 Downstream skills detect completed interviews by checking for files matching
 `.omh/specs/*-spec.md` with `status: confirmed` in the YAML frontmatter.
 
-- **cyclus-ralplan**: If a confirmed spec exists, use it as the goal/specification input
+- **cyclus-plan**: If a confirmed spec exists, use it as the goal/specification input
   to the Planner subagent instead of asking the user to describe the goal.
 - **cyclus-autopilot**: If a confirmed spec exists, skip Phase 0 (requirements) entirely.
 

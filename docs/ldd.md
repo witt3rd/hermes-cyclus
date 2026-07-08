@@ -129,7 +129,7 @@ bypass the loop, the contradiction is visible.
 *Run the loop. One task per invocation. Claim, execute, verify, write_state,
 release, exit.*
 
-This is what `cyclus-ralph` does. The discipline here is the iron law: one
+This is what `cyclus-loop` does. The discipline here is the iron law: one
 task per invocation. The orchestrator stays at altitude — picking batches,
 encoding learnings, gathering evidence, dispatching verifiers. It does not
 drop into the work.
@@ -247,14 +247,14 @@ These are the failure modes that look like progress but aren't:
 
 ## The planning gate (structural enforcement)
 
-Every `cyclus-ralph` invocation checks:
+Every `cyclus-loop` invocation checks:
 
 1. Does `spec.yaml` exist and parse as valid YAML?
 2. Do all required fields for this loop kind pass Pydantic validation?
 3. Are all tasks in the plan budget-sized (< 200 word description)?
 4. Is `level` declared?
 
-If any check fails, `cyclus-ralph` halts with a specific error naming what is
+If any check fails, `cyclus-loop` halts with a specific error naming what is
 missing. It does not proceed with a warning. It does not suggest the work be
 done directly. It names the fix and stops.
 

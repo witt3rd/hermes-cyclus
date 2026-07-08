@@ -37,7 +37,7 @@ def test_missing_mode_returns_error(queue_env):
 
 
 def test_missing_instance_id_returns_error(queue_env):
-    result = json.loads(cyclus_queue_handler({"action": "post", "mode": "ralph"}))
+    result = json.loads(cyclus_queue_handler({"action": "post", "mode": "loop"}))
     assert "error" in result
     assert "instance_id" in result["error"]
 
@@ -51,7 +51,7 @@ def test_post_action_returns_task_id(queue_env):
     result = json.loads(
         cyclus_queue_handler({
             "action": "post",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-001",
             "kind": "TaskExecutionKind",
             "name": "Test plan",
@@ -63,7 +63,7 @@ def test_post_action_returns_task_id(queue_env):
 
 
 def test_post_action_idempotent(queue_env):
-    args = {"action": "post", "mode": "ralph", "instance_id": "plan-idem"}
+    args = {"action": "post", "mode": "loop", "instance_id": "plan-idem"}
     r1 = json.loads(cyclus_queue_handler(args))
     r2 = json.loads(cyclus_queue_handler(args))
     assert r1["task_id"] == r2["task_id"]
@@ -74,7 +74,7 @@ def test_post_action_defaults_kind(queue_env):
     result = json.loads(
         cyclus_queue_handler({
             "action": "post",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-default-kind",
         })
     )
@@ -85,7 +85,7 @@ def test_post_action_with_tags(queue_env):
     result = json.loads(
         cyclus_queue_handler({
             "action": "post",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-tagged",
             "tags": ["my-tag"],
         })
@@ -101,13 +101,13 @@ def test_post_action_with_tags(queue_env):
 def test_claim_after_post(queue_env):
     cyclus_queue_handler({
         "action": "post",
-        "mode": "ralph",
+        "mode": "loop",
         "instance_id": "plan-claim",
     })
     result = json.loads(
         cyclus_queue_handler({
             "action": "claim",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-claim",
         })
     )
@@ -119,7 +119,7 @@ def test_claim_nonexistent_returns_not_found(queue_env):
     result = json.loads(
         cyclus_queue_handler({
             "action": "claim",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "nonexistent-xyz",
         })
     )
@@ -129,13 +129,13 @@ def test_claim_nonexistent_returns_not_found(queue_env):
 def test_claim_with_heartbeat_timeout(queue_env):
     cyclus_queue_handler({
         "action": "post",
-        "mode": "ralph",
+        "mode": "loop",
         "instance_id": "plan-hb",
     })
     result = json.loads(
         cyclus_queue_handler({
             "action": "claim",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-hb",
             "heartbeat_timeout_seconds": 600,
         })
@@ -149,17 +149,17 @@ def test_claim_with_heartbeat_timeout(queue_env):
 
 
 def test_release_after_claim(queue_env):
-    cyclus_queue_handler({"action": "post", "mode": "ralph", "instance_id": "plan-rel"})
-    cyclus_queue_handler({"action": "claim", "mode": "ralph", "instance_id": "plan-rel"})
+    cyclus_queue_handler({"action": "post", "mode": "loop", "instance_id": "plan-rel"})
+    cyclus_queue_handler({"action": "claim", "mode": "loop", "instance_id": "plan-rel"})
     result = json.loads(
-        cyclus_queue_handler({"action": "release", "mode": "ralph", "instance_id": "plan-rel"})
+        cyclus_queue_handler({"action": "release", "mode": "loop", "instance_id": "plan-rel"})
     )
     assert result == {"ok": True}
 
 
 def test_release_nonexistent_is_ok(queue_env):
     result = json.loads(
-        cyclus_queue_handler({"action": "release", "mode": "ralph", "instance_id": "no-such"})
+        cyclus_queue_handler({"action": "release", "mode": "loop", "instance_id": "no-such"})
     )
     assert result == {"ok": True}
 
@@ -170,12 +170,12 @@ def test_release_nonexistent_is_ok(queue_env):
 
 
 def test_write_state_after_claim(queue_env):
-    cyclus_queue_handler({"action": "post", "mode": "ralph", "instance_id": "plan-ws"})
-    cyclus_queue_handler({"action": "claim", "mode": "ralph", "instance_id": "plan-ws"})
+    cyclus_queue_handler({"action": "post", "mode": "loop", "instance_id": "plan-ws"})
+    cyclus_queue_handler({"action": "claim", "mode": "loop", "instance_id": "plan-ws"})
     result = json.loads(
         cyclus_queue_handler({
             "action": "write_state",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-ws",
             "state": {"iteration": 1, "score": 0.75},
         })
@@ -184,12 +184,12 @@ def test_write_state_after_claim(queue_env):
 
 
 def test_write_state_missing_state_field(queue_env):
-    cyclus_queue_handler({"action": "post", "mode": "ralph", "instance_id": "plan-ws-err"})
-    cyclus_queue_handler({"action": "claim", "mode": "ralph", "instance_id": "plan-ws-err"})
+    cyclus_queue_handler({"action": "post", "mode": "loop", "instance_id": "plan-ws-err"})
+    cyclus_queue_handler({"action": "claim", "mode": "loop", "instance_id": "plan-ws-err"})
     result = json.loads(
         cyclus_queue_handler({
             "action": "write_state",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-ws-err",
             # no "state" key
         })
@@ -199,12 +199,12 @@ def test_write_state_missing_state_field(queue_env):
 
 
 def test_write_state_non_dict_state(queue_env):
-    cyclus_queue_handler({"action": "post", "mode": "ralph", "instance_id": "plan-ws-nd"})
-    cyclus_queue_handler({"action": "claim", "mode": "ralph", "instance_id": "plan-ws-nd"})
+    cyclus_queue_handler({"action": "post", "mode": "loop", "instance_id": "plan-ws-nd"})
+    cyclus_queue_handler({"action": "claim", "mode": "loop", "instance_id": "plan-ws-nd"})
     result = json.loads(
         cyclus_queue_handler({
             "action": "write_state",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-ws-nd",
             "state": "not-a-dict",
         })
@@ -219,11 +219,11 @@ def test_write_state_non_dict_state(queue_env):
 
 
 def test_cancel_after_post(queue_env):
-    cyclus_queue_handler({"action": "post", "mode": "ralph", "instance_id": "plan-cancel"})
+    cyclus_queue_handler({"action": "post", "mode": "loop", "instance_id": "plan-cancel"})
     result = json.loads(
         cyclus_queue_handler({
             "action": "cancel",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-cancel",
             "reason": "test cancellation",
         })
@@ -235,7 +235,7 @@ def test_cancel_nonexistent_is_ok(queue_env):
     result = json.loads(
         cyclus_queue_handler({
             "action": "cancel",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "no-such-cancel",
         })
     )
@@ -248,12 +248,12 @@ def test_cancel_nonexistent_is_ok(queue_env):
 
 
 def test_complete_after_claim(queue_env):
-    cyclus_queue_handler({"action": "post", "mode": "ralph", "instance_id": "plan-done"})
-    cyclus_queue_handler({"action": "claim", "mode": "ralph", "instance_id": "plan-done"})
+    cyclus_queue_handler({"action": "post", "mode": "loop", "instance_id": "plan-done"})
+    cyclus_queue_handler({"action": "claim", "mode": "loop", "instance_id": "plan-done"})
     result = json.loads(
         cyclus_queue_handler({
             "action": "complete",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-done",
             "terminal_state": "PlanComplete",
         })
@@ -265,7 +265,7 @@ def test_complete_missing_terminal_state(queue_env):
     result = json.loads(
         cyclus_queue_handler({
             "action": "complete",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-no-ts",
         })
     )
@@ -274,12 +274,12 @@ def test_complete_missing_terminal_state(queue_env):
 
 
 def test_complete_with_output(queue_env):
-    cyclus_queue_handler({"action": "post", "mode": "ralph", "instance_id": "plan-out"})
-    cyclus_queue_handler({"action": "claim", "mode": "ralph", "instance_id": "plan-out"})
+    cyclus_queue_handler({"action": "post", "mode": "loop", "instance_id": "plan-out"})
+    cyclus_queue_handler({"action": "claim", "mode": "loop", "instance_id": "plan-out"})
     result = json.loads(
         cyclus_queue_handler({
             "action": "complete",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-out",
             "terminal_state": "PlanComplete",
             "output": {"score": 0.95, "notes": "done"},
@@ -291,15 +291,15 @@ def test_complete_with_output(queue_env):
 def test_complete_human_gated_violation(queue_env):
     cyclus_queue_handler({
         "action": "post",
-        "mode": "ralph",
+        "mode": "loop",
         "instance_id": "plan-hg",
         "tags": ["HUMAN_GATED"],
     })
-    cyclus_queue_handler({"action": "claim", "mode": "ralph", "instance_id": "plan-hg"})
+    cyclus_queue_handler({"action": "claim", "mode": "loop", "instance_id": "plan-hg"})
     result = json.loads(
         cyclus_queue_handler({
             "action": "complete",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-hg",
             "terminal_state": "PlanComplete",
             "confirmed_by_human": False,
@@ -312,15 +312,15 @@ def test_complete_human_gated_violation(queue_env):
 def test_complete_human_gated_with_confirmation(queue_env):
     cyclus_queue_handler({
         "action": "post",
-        "mode": "ralph",
+        "mode": "loop",
         "instance_id": "plan-hg-ok",
         "tags": ["HUMAN_GATED"],
     })
-    cyclus_queue_handler({"action": "claim", "mode": "ralph", "instance_id": "plan-hg-ok"})
+    cyclus_queue_handler({"action": "claim", "mode": "loop", "instance_id": "plan-hg-ok"})
     result = json.loads(
         cyclus_queue_handler({
             "action": "complete",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-hg-ok",
             "terminal_state": "PlanComplete",
             "confirmed_by_human": True,
@@ -335,16 +335,16 @@ def test_complete_human_gated_with_confirmation(queue_env):
 
 
 def test_status_after_post(queue_env):
-    cyclus_queue_handler({"action": "post", "mode": "ralph", "instance_id": "plan-stat"})
+    cyclus_queue_handler({"action": "post", "mode": "loop", "instance_id": "plan-stat"})
     result = json.loads(
-        cyclus_queue_handler({"action": "status", "mode": "ralph", "instance_id": "plan-stat"})
+        cyclus_queue_handler({"action": "status", "mode": "loop", "instance_id": "plan-stat"})
     )
     assert result.get("status") == "PENDING"
 
 
 def test_status_nonexistent_returns_not_found(queue_env):
     result = json.loads(
-        cyclus_queue_handler({"action": "status", "mode": "ralph", "instance_id": "no-such-stat"})
+        cyclus_queue_handler({"action": "status", "mode": "loop", "instance_id": "no-such-stat"})
     )
     assert result == {"found": False}
 
@@ -358,14 +358,14 @@ def test_dispatch_creates_and_returns_context(queue_env):
     result = json.loads(
         cyclus_queue_handler({
             "action": "dispatch",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-dispatch",
             "kind": "TaskExecutionKind",
             "name": "Dispatch test",
         })
     )
     assert result.get("dispatched") is True
-    assert result.get("mode") == "ralph"
+    assert result.get("mode") == "loop"
     assert result.get("status") == "PENDING"
     assert "task_id" in result
 
@@ -373,7 +373,7 @@ def test_dispatch_creates_and_returns_context(queue_env):
 def test_dispatch_idempotent(queue_env):
     args = {
         "action": "dispatch",
-        "mode": "ralph",
+        "mode": "loop",
         "instance_id": "plan-dispatch-idem",
     }
     r1 = json.loads(cyclus_queue_handler(args))
@@ -383,18 +383,18 @@ def test_dispatch_idempotent(queue_env):
 
 
 def test_dispatch_already_complete_returns_error(queue_env):
-    cyclus_queue_handler({"action": "post", "mode": "ralph", "instance_id": "plan-dc-done"})
-    cyclus_queue_handler({"action": "claim", "mode": "ralph", "instance_id": "plan-dc-done"})
+    cyclus_queue_handler({"action": "post", "mode": "loop", "instance_id": "plan-dc-done"})
+    cyclus_queue_handler({"action": "claim", "mode": "loop", "instance_id": "plan-dc-done"})
     cyclus_queue_handler({
         "action": "complete",
-        "mode": "ralph",
+        "mode": "loop",
         "instance_id": "plan-dc-done",
         "terminal_state": "PlanComplete",
     })
     result = json.loads(
         cyclus_queue_handler({
             "action": "dispatch",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-dc-done",
         })
     )
@@ -411,7 +411,7 @@ def test_unknown_action_raises_value_error(queue_env):
     result = json.loads(
         cyclus_queue_handler({
             "action": "frobnicate",
-            "mode": "ralph",
+            "mode": "loop",
             "instance_id": "plan-bad",
         })
     )

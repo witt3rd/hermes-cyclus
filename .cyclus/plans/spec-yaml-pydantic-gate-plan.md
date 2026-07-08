@@ -7,7 +7,7 @@
 
 Implement issue #7: migrate loop specs from spec.md (markdown + YAML frontmatter) to
 spec.yaml (pure YAML), define Pydantic validation models, wire planning gate into
-cyclus-ralph Step 2.
+cyclus-loop Step 2.
 
 ## Tasks
 
@@ -150,9 +150,9 @@ Same procedure as Task 3a, applied to test_coverage.
 
 ---
 
-### Task 4 — Wire load_spec() planning gate into cyclus-ralph Step 2
+### Task 4 — Wire load_spec() planning gate into cyclus-loop Step 2
 
-**Files owned:** `skills/cyclus-ralph/SKILL.md`
+**Files owned:** `skills/cyclus-loop/SKILL.md`
 
 **Description:**
 Update Step 2 to add a spec validation gate as the *first check* before any plan
@@ -174,9 +174,9 @@ Add to Pitfalls:
 > raises, stop. A malformed spec will corrupt every subsequent iteration.
 
 **Acceptance criteria (grep-verifiable):**
-- `grep -c 'load_spec' skills/cyclus-ralph/SKILL.md` → ≥ 1
-- `grep -c 'spec.yaml' skills/cyclus-ralph/SKILL.md` → ≥ 1
-- `grep -c 'ralplan-\*.md' skills/cyclus-ralph/SKILL.md` → ≥ 1 (existing logic intact)
+- `grep -c 'load_spec' skills/cyclus-loop/SKILL.md` → ≥ 1
+- `grep -c 'spec.yaml' skills/cyclus-loop/SKILL.md` → ≥ 1
+- `grep -c 'ralplan-\*.md' skills/cyclus-loop/SKILL.md` → ≥ 1 (existing logic intact)
 - File is valid Markdown; YAML frontmatter unchanged
 
 **Dependencies:** Task 1, Task 2

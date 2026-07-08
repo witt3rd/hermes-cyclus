@@ -3,7 +3,7 @@
 # Required fields (all loop kinds)
 kind: TaskExecutionKind        # TaskExecutionKind | ConsensusKind | MetricOptimizationKind
                                # InformationSeekingKind | ClarificationKind | BatchKind
-name: my-loop                  # slug — used as instance_id in cyclus-ralph
+name: my-loop                  # slug — used as instance_id in cyclus-loop
 level: L1                      # ALWAYS L1 on first design. Earn L2/L3 later.
 
 terminal:

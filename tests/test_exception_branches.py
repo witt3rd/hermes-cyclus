@@ -48,14 +48,14 @@ def queue_env(tmp_path, monkeypatch):
 
 def test_claim_corrupt_pending_json_returns_not_found(queue_env, tmp_path):
     """If the pending JSON is corrupt, claim should return not_found."""
-    post(mode="ralph", instance_id="corrupt-pend", kind="TaskExecutionKind", name="x")
+    post(mode="loop", instance_id="corrupt-pend", kind="TaskExecutionKind", name="x")
 
     # Corrupt the pending file
     pending_dir = tmp_path / ".cyclus" / "queue" / "pending"
     f = next(pending_dir.glob("*.json"))
     f.write_text("{ this is not valid json {{")
 
-    result = claim(mode="ralph", instance_id="corrupt-pend")
+    result = claim(mode="loop", instance_id="corrupt-pend")
     assert result.status == "not_found"
 
 
@@ -66,7 +66,7 @@ def test_claim_corrupt_pending_json_returns_not_found(queue_env, tmp_path):
 
 def test_claim_rename_race_returns_not_found(queue_env, tmp_path):
     """If os.rename fails (FileNotFoundError — another worker claimed it), return not_found."""
-    post(mode="ralph", instance_id="race-claim", kind="TaskExecutionKind", name="x")
+    post(mode="loop", instance_id="race-claim", kind="TaskExecutionKind", name="x")
 
     original_rename = os.rename
 
@@ -80,7 +80,7 @@ def test_claim_rename_race_returns_not_found(queue_env, tmp_path):
         return original_rename(src, dst)
 
     with patch("cyclus.queue.os.rename", side_effect=failing_rename):
-        result = claim(mode="ralph", instance_id="race-claim")
+        result = claim(mode="loop", instance_id="race-claim")
 
     assert result.status == "not_found"
 
@@ -92,8 +92,8 @@ def test_claim_rename_race_returns_not_found(queue_env, tmp_path):
 
 def test_release_rename_oserror_is_swallowed(queue_env):
     """OSError in os.rename during release() should be silently swallowed."""
-    post(mode="ralph", instance_id="rel-oserr", kind="TaskExecutionKind", name="x")
-    claim(mode="ralph", instance_id="rel-oserr")
+    post(mode="loop", instance_id="rel-oserr", kind="TaskExecutionKind", name="x")
+    claim(mode="loop", instance_id="rel-oserr")
 
     original_rename = os.rename
 
@@ -104,7 +104,7 @@ def test_release_rename_oserror_is_swallowed(queue_env):
 
     with patch("cyclus.queue.os.rename", side_effect=failing_rename):
         # Should not raise
-        release(mode="ralph", instance_id="rel-oserr")
+        release(mode="loop", instance_id="rel-oserr")
 
 
 # ---------------------------------------------------------------------------
@@ -114,8 +114,8 @@ def test_release_rename_oserror_is_swallowed(queue_env):
 
 def test_complete_rename_race_falls_back_to_done_write(queue_env, tmp_path):
     """If os.rename from active→done raises, complete() writes to done/ directly."""
-    post(mode="ralph", instance_id="comp-race", kind="TaskExecutionKind", name="x")
-    claim(mode="ralph", instance_id="comp-race")
+    post(mode="loop", instance_id="comp-race", kind="TaskExecutionKind", name="x")
+    claim(mode="loop", instance_id="comp-race")
 
     original_rename = os.rename
     call_count = [0]
@@ -128,7 +128,7 @@ def test_complete_rename_race_falls_back_to_done_write(queue_env, tmp_path):
         return original_rename(src, dst)
 
     with patch("cyclus.queue.os.rename", side_effect=failing_rename):
-        complete(mode="ralph", instance_id="comp-race", terminal_state="PlanComplete")
+        complete(mode="loop", instance_id="comp-race", terminal_state="PlanComplete")
 
     # Item should be in done/ (written directly)
     done_dir = tmp_path / ".cyclus" / "queue" / "done"
@@ -151,7 +151,7 @@ def test_queue_tool_generic_exception_returns_error(queue_env):
         result = json.loads(
             cyclus_queue_handler({
                 "action": "post",
-                "mode": "ralph",
+                "mode": "loop",
                 "instance_id": "exc-test",
             })
         )

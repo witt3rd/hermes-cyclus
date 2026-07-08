@@ -1,5 +1,5 @@
 ---
-name: cyclus-ralplan
+name: cyclus-plan
 description: "Planner+Architect+Critic→consensus impl plan (≤3 rounds)"
 version: 2.0.0
 metadata:
@@ -9,7 +9,7 @@ metadata:
     requires_toolsets: [terminal, omh]
 ---
 
-# OMH Ralplan — Consensus Planning
+# Cyclus Plan — Consensus Planning
 
 > **Loop kind:** This skill implements a `ConsensusKind` loop.  
 > Turn results: `RoundComplete | ConsensusReached`  
@@ -31,7 +31,7 @@ metadata:
 
 ## Prerequisites
 
-- A clear goal or specification (if ambiguous, use `cyclus-deep-interview` first)
+- A clear goal or specification (if ambiguous, use `cyclus-interview` first)
 - The `delegate_task` tool must be available
 
 ## Procedure
@@ -51,7 +51,7 @@ Before planning, gather project context:
 
 Load the planner role prompt before delegating:
 ```
-planner_prompt = skill_view(name="cyclus-ralplan", file_path="references/role-planner.md")
+planner_prompt = skill_view(name="cyclus-plan", file_path="references/role-planner.md")
 ```
 If `skill_view` returns empty or raises, abort: "Role prompt unavailable — cannot dispatch without role context."
 
@@ -67,7 +67,7 @@ The goal should include the full specification — don't assume the subagent kno
 
 Load the architect role prompt before delegating:
 ```
-architect_prompt = skill_view(name="cyclus-ralplan", file_path="references/role-architect.md")
+architect_prompt = skill_view(name="cyclus-plan", file_path="references/role-architect.md")
 ```
 If `skill_view` returns empty or raises, abort: "Role prompt unavailable — cannot dispatch without role context."
 
@@ -82,7 +82,7 @@ delegate_task(
 
 Load the critic role prompt before delegating:
 ```
-critic_prompt = skill_view(name="cyclus-ralplan", file_path="references/role-critic.md")
+critic_prompt = skill_view(name="cyclus-plan", file_path="references/role-critic.md")
 ```
 If `skill_view` returns empty or raises, abort: "Role prompt unavailable — cannot dispatch without role context."
 
@@ -134,13 +134,13 @@ Use the `cyclus_queue` tool for state persistence:
 
 **Post a work item (first invocation):**
 ```
-cyclus_queue(action="post", mode="ralplan", instance_id="{slug}",
+cyclus_queue(action="post", mode="plan", instance_id="{slug}",
     kind="ConsensusKind", name="Ralplan: {goal_summary}")
 ```
 
 **Write state after each phase:**
 ```
-cyclus_queue(action="write_state", mode="ralplan", instance_id="{slug}", state={
+cyclus_queue(action="write_state", mode="plan", instance_id="{slug}", state={
     "goal": "...", "round": 1,
     "phase": "planner|architect|critic|complete",
     "consensus": False, "plan_file": ".omh/plans/ralplan-{slug}.md"
@@ -149,13 +149,13 @@ cyclus_queue(action="write_state", mode="ralplan", instance_id="{slug}", state={
 
 After each round completes and the skill exits cleanly, release the item:
 ```
-cyclus_queue(action="release", mode="ralplan", instance_id="{slug}")
+cyclus_queue(action="release", mode="plan", instance_id="{slug}")
 ```
 
 If a ralplan session is interrupted, check for an active work item and resume
 from the last completed phase:
 ```
-item = cyclus_queue(action="status", mode="ralplan", instance_id="{slug}")
+item = cyclus_queue(action="status", mode="plan", instance_id="{slug}")
 # Returns None if no active run exists for this slug.
 # When present, read item["state_path"] to load the last written state JSON.
 ```
@@ -166,14 +166,14 @@ When the user requests deliberate mode or uses "deliberate", "ADR", or "decision
 
 ## Pitfalls
 
-- **Load role prompts via `skill_view` before each `delegate_task` call** — use `skill_view(name="cyclus-ralplan", file_path="references/role-{role}.md")` and pass the result as `context`. If `skill_view` returns empty, abort with "Role prompt unavailable." Do NOT inline role prompts manually; the old role-marker injection mechanism has been retired.
+- **Load role prompts via `skill_view` before each `delegate_task` call** — use `skill_view(name="cyclus-plan", file_path="references/role-{role}.md")` and pass the result as `context`. If `skill_view` returns empty, abort with "Role prompt unavailable." Do NOT inline role prompts manually; the old role-marker injection mechanism has been retired.
 - **Include full specifications in the goal** — subagents start with zero context. The goal + context must be self-contained.
 - **Run Round 2+ reviews in parallel** — Architect and Critic are independent in re-review rounds. Use batch delegate_task to save time.
 - **Summarize feedback with IDs for the Planner** — when looping, label feedback as A1/A2/C1/C2/W1 etc. so the Planner can address each point explicitly and the reviewers can check each one off.
 - Don't let the loop run more than 3 rounds — if no consensus by round 3, output with caveats
 - Each subagent must receive the project context, not just the plan — they need to evaluate against reality
 - The Critic should challenge, not block — if issues are minor, APPROVE with reservations
-- If the goal is ambiguous, stop and suggest `cyclus-deep-interview` instead of planning with unclear requirements
+- If the goal is ambiguous, stop and suggest `cyclus-interview` instead of planning with unclear requirements
 - **Use todo tracking** — update a todo list with round/phase status so the user sees progress during what can be a 5-10 minute process
 - **When porting/adapting from a reference system, feed actual source to subagents** — if designing a skill inspired by another system (e.g., OMC → Hermes), the Planner, Architect, and Critic must read the actual source implementation, not just briefs or summaries. Extract reference docs from the source repo first, pass file paths in the delegate_task goal so subagents read them. Summaries lose critical field names, state schemas, edge cases, and design patterns.
 - **The Critic's simplicity test can change architecture** — don't dismiss it. In the ralph consensus, the Critic proposed one-task-per-invocation (instead of an in-session loop) which both reviewers then approved as fundamentally better. The consensus process finds the right architecture, not just validates the proposed one.

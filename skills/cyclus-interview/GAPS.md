@@ -1,4 +1,4 @@
-# cyclus-deep-interview — Gaps vs OMC Reference
+# cyclus-interview — Gaps vs OMC Reference
 
 Identified by comparing our v1.0.0 against the actual OMC deep-interview
 SKILL.md (650 lines) at /home/dt/src/ext/oh-my-claudecode/skills/deep-interview/SKILL.md

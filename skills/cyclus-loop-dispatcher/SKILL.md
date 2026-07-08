@@ -1,6 +1,6 @@
 ---
-name: cyclus-ralph-driver
-description: "Drive an cyclus-ralph run: dispatch, evidence, commit hygiene."
+name: cyclus-loop-dispatcher
+description: "Drive an cyclus-loop run: dispatch, evidence, commit hygiene."
 version: 1.0.0
 metadata:
   hermes:
@@ -9,10 +9,10 @@ metadata:
     requires_toolsets: [terminal, omh]
 ---
 
-# OMH Ralph Driver — orchestrator's playbook for verified execution
+# OMH Loop Dispatcher — orchestrator's playbook for verified execution
 
-Load this skill alongside `cyclus-ralph` when you are the orchestrator
-dispatching the loop. `cyclus-ralph` is loaded by the role-tagged
+Load this skill alongside `cyclus-loop` when you are the orchestrator
+dispatching the loop. `cyclus-loop` is loaded by the role-tagged
 *workers* (executor / verifier / architect) — it covers the iron-law
 discipline inside each task's `delegate_task` call. This skill covers
 what *you* do as the dispatcher: plan-shape, iteration cadence,
@@ -23,7 +23,7 @@ The two skills have different readers and different jobs. Don't merge
 them — worker context is precious; the dispatcher's playbook should
 not ride into every subagent.
 
-This skill is the ralph-side counterpart to `cyclus-ralplan-driver`
+This skill is the ralph-side counterpart to `cyclus-plan-dispatcher`
 (which is the dispatcher playbook for ralplan, the design loop). The
 relationship is consistent: each method has a worker-side skill (used
 inside delegate_task) and a driver-side skill (used by the orchestrator
@@ -34,7 +34,7 @@ between dispatches).
 Use ralph when:
 
 - You have a plan with 5+ independently-acceptable tasks (from
-  `cyclus-ralplan` or hand-authored).
+  `cyclus-plan` or hand-authored).
 - Quality-via-verification matters more than wall-clock — each task's
   output must be evidence-graded before the next builds on it.
 - You want clean checkpoints across many work units (no context bloat).
@@ -43,8 +43,8 @@ Use ralph when:
 Don't use ralph when:
 
 - The work is single-step or trivially obvious to write directly.
-- No plan exists yet — run `cyclus-ralplan` (or for an obvious goal,
-  `cyclus-deep-interview` first) before invoking ralph.
+- No plan exists yet — run `cyclus-plan` (or for an obvious goal,
+  `cyclus-interview` first) before invoking ralph.
 - The user wants to skip verification (unusual; usually means the
   work is small enough to do directly).
 
@@ -80,7 +80,7 @@ A ralph plan is a list of numbered tasks, each with:
 - Dependencies (which other tasks must be done first).
 - Files-touched (for parallel-batch planning — see step 3).
 
-If the plan came from `cyclus-ralplan`, it is design-shaped, not ralph-shaped. The stance's "MV slice" section is your starting point; you may need to translate it to ralph's task format. Author `.omh/plans/ralph-plan.md` (or `.omh/plans/ralplan-<slug>.md` if it derives from a specific ralplan instance) with proper task structure.
+If the plan came from `cyclus-plan`, it is design-shaped, not ralph-shaped. The stance's "MV slice" section is your starting point; you may need to translate it to ralph's task format. Author `.omh/plans/ralph-plan.md` (or `.omh/plans/ralplan-<slug>.md` if it derives from a specific ralplan instance) with proper task structure.
 
 The plan does not need every task pre-authored to the same depth — it can grow. Ralph's planning gate parses what's there at first invocation; new tasks discovered during execution land via the `discovered: true` flag in state.
 
@@ -136,7 +136,7 @@ The executor dispatch context must contain:
 
 Before dispatching each executor, load the role prompt explicitly:
 ```
-executor_prompt = skill_view(name="cyclus-ralph", file_path="references/role-executor.md")
+executor_prompt = skill_view(name="cyclus-loop", file_path="references/role-executor.md")
 ```
 If `skill_view` returns empty or raises, abort the delegation:
 "Role prompt unavailable — cannot dispatch without role context."
@@ -180,7 +180,7 @@ dispatching the verifier.
 
 For each completed task, dispatch a verifier subagent. Before dispatching, load the role prompt:
 ```
-verifier_prompt = skill_view(name="cyclus-ralph", file_path="references/role-verifier.md")
+verifier_prompt = skill_view(name="cyclus-loop", file_path="references/role-verifier.md")
 ```
 If `skill_view` returns empty or raises, abort: "Role prompt unavailable — cannot dispatch
 without role context."
@@ -217,7 +217,7 @@ Numbered for cross-reference; gaps reserved for future additions.
 
 ### P1 — Plan must be ralph-shaped, not design-shaped
 
-`cyclus-ralplan` produces a `stance.md` — a design document. Ralph
+`cyclus-plan` produces a `stance.md` — a design document. Ralph
 needs a task list with testable acceptance criteria.
 
 If you point ralph at a stance directly, the planning gate either
@@ -371,7 +371,7 @@ Examples worth encoding forward:
   it; don't duplicate the taxonomy."
 
 These compress and ride forward via the dispatch context. The
-cyclus-ralph state's `completed_task_learnings` is the canonical store.
+cyclus-loop state's `completed_task_learnings` is the canonical store.
 
 ### P5 — Distinguish executor strikes by category
 
@@ -403,7 +403,7 @@ Tag the strike category in the error fingerprint when updating state:
 ]
 ```
 
-The 3-strike circuit breaker (per `cyclus-ralph` Step 6) fires when the
+The 3-strike circuit breaker (per `cyclus-loop` Step 6) fires when the
 same `(category, error_key)` repeats three times. Tagging by category
 prevents test-infra strikes from masking real bugs (or vice versa).
 
@@ -459,7 +459,7 @@ examples (APPROVE_WITH_PROVISO and REQUEST_CHANGES) — is at
 
 ### P8 — Update state at every action; release at every clean exit
 
-Per `cyclus-ralph` Step 0/Step 8: work item state is stored in `.omh/queue.db` and written
+Per `cyclus-loop` Step 0/Step 8: work item state is stored in `.omh/queue.db` and written
 to the file at `state_path` (returned by `claim()`). Intermediate state (tasks, learnings,
 phase, iteration count) is persisted via `write_state()`; completion is recorded via `complete()`.
 
@@ -535,22 +535,22 @@ after restart.
 
 ```python
 # Step 0: claim (or post then claim on first run)
-result = cyclus_queue(action="claim", mode="ralph", instance_id=instance_id)
+result = cyclus_queue(action="claim", mode="loop", instance_id=instance_id)
 # if result["status"] == "not_found":
-#     cyclus_queue(action="post", mode="ralph", instance_id=instance_id,
+#     cyclus_queue(action="post", mode="loop", instance_id=instance_id,
 #               kind="TaskExecutionKind", name="<plan description>")
-#     result = cyclus_queue(action="claim", mode="ralph", instance_id=instance_id)
+#     result = cyclus_queue(action="claim", mode="loop", instance_id=instance_id)
 state_path = result["item"]["state_path"]
 
 # Check for cancel before proceeding
-item_status = cyclus_queue(action="status", mode="ralph", instance_id=instance_id)
+item_status = cyclus_queue(action="status", mode="loop", instance_id=instance_id)
 # if item_status.get("cancel_requested"): call complete(..., terminal_state="Cancelled")
 
 # Step 1: read state (or trigger planning gate)
 state = read_file(state_path)  # JSON dict; empty on first run
 
 # Step 2: planning gate (only on first invocation)
-cyclus_queue(action="write_state", mode="ralph", instance_id=instance_id, state={
+cyclus_queue(action="write_state", mode="loop", instance_id=instance_id, state={
     "active": True, "phase": "execute", "iteration": 0,
     "tasks": [{"id": "task-1", "title": "...", "description": "...",
                "acceptance_criteria": "...", "priority": 1,
@@ -561,17 +561,17 @@ cyclus_queue(action="write_state", mode="ralph", instance_id=instance_id, state=
 # (delegate_task for executors, cyclus_evidence, delegate_task for verifiers)
 
 # After each action: update state, check cancel
-cyclus_queue(action="write_state", mode="ralph", instance_id=instance_id, state={
+cyclus_queue(action="write_state", mode="loop", instance_id=instance_id, state={
     "active": True, "phase": "execute", "iteration": N, ...,
     "completed_task_learnings": [...]
 })
 # Check: cyclus_queue(action="status", ...)  → cancel_requested?
 
 # Clean exit: release so next invocation can claim immediately
-cyclus_queue(action="release", mode="ralph", instance_id=instance_id)
+cyclus_queue(action="release", mode="loop", instance_id=instance_id)
 
 # Final completion (Step 7 APPROVE):
-cyclus_queue(action="complete", mode="ralph", instance_id=instance_id,
+cyclus_queue(action="complete", mode="loop", instance_id=instance_id,
           terminal_state="PlanComplete", output={"tasks_completed": N})
 ```
 
@@ -626,17 +626,17 @@ a pitfall is general enough to teach a future orchestrator.
 
 ## Related skills
 
-- `cyclus-ralph` — the worker-side discipline, loaded inside each
+- `cyclus-loop` — the worker-side discipline, loaded inside each
   delegate_task. Required reading for the orchestrator (one-off, to
   understand what the workers are doing) but not loaded into worker
   context directly — role prompts are loaded via `skill_view` before each dispatch.
-- `cyclus-ralplan-driver` — the dispatcher playbook for the
+- `cyclus-plan-dispatcher` — the dispatcher playbook for the
   design loop. Use BEFORE ralph if no plan exists yet. Same shape
   (driver-side skill) for a different method (consensus design vs
   verified execution).
-- `cyclus-ralplan` — the worker-side design discipline. Use only inside
+- `cyclus-plan` — the worker-side design discipline. Use only inside
   delegate_task with explicit role prompts loaded via `skill_view` (v18+).
-  See Role Prompt Loading in cyclus-ralph for the pattern.
+  See Role Prompt Loading in cyclus-loop for the pattern.
 - `enabling-hermes-plugin-in-profile` — sibling skill for the
   plugin-install diagnostic ladder. Cite if a ralph run is blocked
   because OMH tools aren't in the function schema.

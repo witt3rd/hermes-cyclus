@@ -1,5 +1,5 @@
 ---
-name: cyclus-ralph
+name: cyclus-loop
 description: "execute plan: 1 task/call, verify evidence, iron law"
 version: 2.0.0
 metadata:
@@ -9,7 +9,7 @@ metadata:
     category: omh
 ---
 
-# OMH Ralph — Verified Execution (v2)
+# OMH Loop — Verified Execution (v2)
 
 > **Requires the OMH plugin.** Install `plugins/omh/` from this repo to
 > `~/.hermes/plugins/omh/`.
@@ -20,14 +20,14 @@ is tracked in `.omh/queue.db` via the `cyclus_queue` tool.
 
 ## When to Use
 
-- You have a plan (from cyclus-ralplan or manual) and need verified execution
+- You have a plan (from cyclus-plan or manual) and need verified execution
 - The user says: "ralph", "don't stop", "until done", "must complete", "keep going"
 - You need guaranteed verification — not just "looks done" but evidence-backed completion
 - Multi-step implementation where each task must be independently verified
 
 ## When NOT to Use
 
-- No plan or spec exists (use cyclus-deep-interview and/or cyclus-ralplan first)
+- No plan or spec exists (use cyclus-interview and/or cyclus-plan first)
 - Trivial single-file changes (just do them directly)
 - The user explicitly wants to skip verification
 
@@ -58,22 +58,22 @@ and produce non-deterministic outcomes. Use per-instance claim to make concurren
    - If no plan exists yet (Step 2 will choose), use `instance_id="default"`.
 2. **Claim the work item** before reading/writing state:
    ```
-   result = cyclus_queue(action="claim", mode="ralph", instance_id="{instance_id}")
+   result = cyclus_queue(action="claim", mode="loop", instance_id="{instance_id}")
    ```
    - `result.status="claimed"`: continue. `result.item.state_path` holds the path to the
      intermediate state file.
    - `result.status="not_found"`: no work item exists yet — call
-     `cyclus_queue(action="post", mode="ralph", instance_id="{instance_id}", kind="TaskExecutionKind", name="{plan description}")`
+     `cyclus_queue(action="post", mode="loop", instance_id="{instance_id}", kind="TaskExecutionKind", name="{plan description}")`
      first, then claim again.
    - `result.status="running"`: another session holds this item (fresh heartbeat). Report
-     this to the user (check `cyclus_queue(action="status", mode="ralph", instance_id="{instance_id}")`
+     this to the user (check `cyclus_queue(action="status", mode="loop", instance_id="{instance_id}")`
      for metadata). Offer: wait / signal cancel
-     (`cyclus_queue(action="cancel", mode="ralph", instance_id="{instance_id}")`)
+     (`cyclus_queue(action="cancel", mode="loop", instance_id="{instance_id}")`)
      and retry on next invocation / pick a different plan.
 3. **Pass `instance_id` to every subsequent `cyclus_queue` call in this invocation.**
 4. **Release the item at every clean exit point** (success, blocked, max-iterations):
    ```
-   cyclus_queue(action="release", mode="ralph", instance_id="{instance_id}")
+   cyclus_queue(action="release", mode="loop", instance_id="{instance_id}")
    ```
    This resets the item to PENDING so the next invocation can claim immediately.
    On crash (no release called), heartbeat-based reclaim fires after 300 seconds
@@ -81,7 +81,7 @@ and produce non-deterministic outcomes. Use per-instance claim to make concurren
 
 > **State file.** All intermediate state is read/written via `state_path` (a JSON file
 > in the project). Read: `read_file(result.item.state_path)`. Write:
-> `cyclus_queue(action="write_state", mode="ralph", instance_id="{instance_id}", state={...})`.
+> `cyclus_queue(action="write_state", mode="loop", instance_id="{instance_id}", state={...})`.
 
 ### Step 1: Read State
 
@@ -98,10 +98,10 @@ state = read_file(state_path)        # JSON; empty dict on first invocation
 
 Check for cancel signal:
 ```
-item_status = cyclus_queue(action="status", mode="ralph", instance_id="{instance_id}")
+item_status = cyclus_queue(action="status", mode="loop", instance_id="{instance_id}")
 ```
 If `item_status.cancel_requested=1`: call
-`cyclus_queue(action="complete", mode="ralph", instance_id="{instance_id}", terminal_state="Cancelled")`
+`cyclus_queue(action="complete", mode="loop", instance_id="{instance_id}", terminal_state="Cancelled")`
 and exit.
 
 Check staleness: if `state.stale=true`, warn the user and offer to continue or fresh start.
@@ -126,11 +126,11 @@ If found:
 
 Ralph MUST NOT execute without a plan. Check sources in order:
 
-1. `cyclus_queue(action="status", mode="ralph", instance_id="{instance_id}")` — if tasks are
+1. `cyclus_queue(action="status", mode="loop", instance_id="{instance_id}")` — if tasks are
    already loaded in `state_path`, skip to Step 3
 2. `.omh/plans/ralplan-*.md` — parse into task list, write via `write_state`
 3. `.omh/plans/ralph-plan.md` — parse into task list, write via `write_state`
-4. Nothing found → tell user: "No plan found. Run `cyclus-ralplan` first."
+4. Nothing found → tell user: "No plan found. Run `cyclus-plan` first."
 
 **Plan parsing rules:**
 - Extract numbered tasks with titles, descriptions, and acceptance criteria
@@ -141,7 +141,7 @@ Ralph MUST NOT execute without a plan. Check sources in order:
 
 Write initial state:
 ```
-cyclus_queue(action="write_state", mode="ralph", instance_id="{instance_id}", state={
+cyclus_queue(action="write_state", mode="loop", instance_id="{instance_id}", state={
   "active": true, "phase": "execute", "iteration": 0,
   "session_id": "<uuid>", "max_iterations": 100,
   "task_prompt": "<original user request>",
@@ -155,9 +155,9 @@ cyclus_queue(action="write_state", mode="ralph", instance_id="{instance_id}", st
 })
 ```
 
-Also check cancel signal: if `cyclus_queue(action="status", mode="ralph", instance_id="{instance_id}")`
+Also check cancel signal: if `cyclus_queue(action="status", mode="loop", instance_id="{instance_id}")`
 returns `cancel_requested=1`, call
-`cyclus_queue(action="complete", mode="ralph", instance_id="{instance_id}", terminal_state="Cancelled")`
+`cyclus_queue(action="complete", mode="loop", instance_id="{instance_id}", terminal_state="Cancelled")`
 and exit.
 
 ### Step 3: Pick Next Task
@@ -181,7 +181,7 @@ footprint, no dependency between them), batch them into one `delegate_task` call
 
 Before delegating, load the role prompt:
 ```
-executor_prompt = skill_view(name="cyclus-ralph", file_path="references/role-executor.md")
+executor_prompt = skill_view(name="cyclus-loop", file_path="references/role-executor.md")
 ```
 If `skill_view` returns empty or raises, abort: "Role prompt unavailable — cannot dispatch
 without role context."
@@ -221,7 +221,7 @@ enforces timeouts, and returns `{results, all_pass, summary}`.
 
 Before delegating, load the role prompt:
 ```
-verifier_prompt = skill_view(name="cyclus-ralph", file_path="references/role-verifier.md")
+verifier_prompt = skill_view(name="cyclus-loop", file_path="references/role-verifier.md")
 ```
 If `skill_view` returns empty or raises, abort: "Role prompt unavailable — cannot dispatch
 without role context."
@@ -238,7 +238,7 @@ Parse the verifier's response:
   `{task_id, summary, files_changed, gotchas}`. Append to `.omh/logs/ralph-progress.md`.
 - **REQUEST_CHANGES / FAIL**: Record `task.verifier_verdict`. Check 3-strike rule (Step 6).
 
-Write updated state via `cyclus_queue(action="write_state", mode="ralph", instance_id="{instance_id}", state={...})`.
+Write updated state via `cyclus_queue(action="write_state", mode="loop", instance_id="{instance_id}", state={...})`.
 Also check cancel signal: if `cancel_requested=1`, call
 `cyclus_queue(action="complete", ..., terminal_state="Cancelled")` and exit.
 
@@ -252,9 +252,9 @@ release, exit.
 
 **Cancel detection** (if user says "stop", "cancel", "abort"):
 ```
-cyclus_queue(action="cancel", mode="ralph", instance_id="{instance_id}", reason="user request")
+cyclus_queue(action="cancel", mode="loop", instance_id="{instance_id}", reason="user request")
 ```
-Then call `cyclus_queue(action="complete", mode="ralph", instance_id="{instance_id}", terminal_state="Cancelled")`
+Then call `cyclus_queue(action="complete", mode="loop", instance_id="{instance_id}", terminal_state="Cancelled")`
 and exit with resume instructions.
 
 ### Step 7: Final Review
@@ -263,7 +263,7 @@ When all tasks have `passes: true`:
 
 Before delegating, load the role prompt:
 ```
-architect_prompt = skill_view(name="cyclus-ralph", file_path="references/role-architect.md")
+architect_prompt = skill_view(name="cyclus-loop", file_path="references/role-architect.md")
 ```
 If `skill_view` returns empty or raises, abort: "Role prompt unavailable — cannot dispatch
 without role context."
@@ -277,7 +277,7 @@ delegate_task(
 )
 ```
 
-- **APPROVE**: Call `cyclus_queue(action="complete", mode="ralph", instance_id="{instance_id}", terminal_state="PlanComplete", output={"tasks_completed": N, "files_modified": [...], "progress_log": ".omh/logs/ralph-progress.md"})`. Keep progress log.
+- **APPROVE**: Call `cyclus_queue(action="complete", mode="loop", instance_id="{instance_id}", terminal_state="PlanComplete", output={"tasks_completed": N, "files_modified": [...], "progress_log": ".omh/logs/ralph-progress.md"})`. Keep progress log.
 - **REQUEST_CHANGES**: Add new tasks with `discovered: true`, write updated state via `write_state`,
   set `phase="execute"`, release, continue on next invocation.
 
@@ -285,12 +285,12 @@ delegate_task(
 
 After every action, write intermediate state:
 ```
-cyclus_queue(action="write_state", mode="ralph", instance_id="{instance_id}", state={...updated state...})
+cyclus_queue(action="write_state", mode="loop", instance_id="{instance_id}", state={...updated state...})
 ```
 
 At every clean exit point (not crash), release the item:
 ```
-cyclus_queue(action="release", mode="ralph", instance_id="{instance_id}")
+cyclus_queue(action="release", mode="loop", instance_id="{instance_id}")
 ```
 
 Exit cleanly. The caller re-invokes for the next iteration.
@@ -303,14 +303,14 @@ Exit cleanly. The caller re-invokes for the next iteration.
 - **Don't conflate verifier and architect.** Different jobs, different prompts, different phases.
 - **Respect the 3-strike rule.** Same error 3 times → surface the fundamental issue.
 - **Feed learnings forward.** Include `completed_task_learnings` in every executor delegation.
-- **Role prompts must be loaded via skill_view before delegating — not injected automatically in v18.** Use `skill_view(name="cyclus-ralph", file_path="references/role-{role}.md")`. If `skill_view` returns empty, abort the delegation — a role-less subagent produces garbage results. Available roles: executor, verifier, architect.
+- **Role prompts must be loaded via skill_view before delegating — not injected automatically in v18.** Use `skill_view(name="cyclus-loop", file_path="references/role-{role}.md")`. If `skill_view` returns empty, abort the delegation — a role-less subagent produces garbage results. Available roles: executor, verifier, architect.
 - **Call release() at clean exit so the next invocation can claim immediately.** Without `release()`, the next `claim()` waits up to 300 seconds (heartbeat timeout) before reclaiming. On crash, heartbeat-based reclaim handles recovery automatically — no manual unlock needed.
 - **Spec gate fires before plan parsing.** If `spec.yaml` is present and `load_spec()` raises, stop. A malformed spec will corrupt every subsequent iteration; fail loudly at the gate rather than silently producing wrong output.
 
 ## Sentinel Convention
 
 Other skills detect ralph status:
-- `cyclus_queue(action="status", mode="ralph", instance_id="{instance_id}")` → returns item dict
+- `cyclus_queue(action="status", mode="loop", instance_id="{instance_id}")` → returns item dict
   with `status`, `terminal_state`, `cancel_requested` fields; returns `{"found": false}` if
   no item exists
 - `terminal_state="PlanComplete"` → ralph finished successfully

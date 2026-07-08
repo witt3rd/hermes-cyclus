@@ -1,17 +1,17 @@
 ---
-name: cyclus-ralph-task
-description: "Execute one cyclus-ralph task: file-scope, commit, report."
+name: cyclus-loop-task
+description: "Execute one cyclus-loop task: file-scope, commit, report."
 version: 1.0.0
 metadata:
   hermes:
     category: omh
     tags: [omh, ralph, executor, multi-agent, kanban-adjacent]
-    related_skills: [cyclus-ralplan-driver, cyclus-ralph-driver, cyclus-triage-driver]
+    related_skills: [cyclus-plan-dispatcher, cyclus-loop-dispatcher, cyclus-triage-dispatcher]
 ---
 
-# cyclus-ralph-task — executor discipline
+# cyclus-loop-task — executor discipline
 
-You are seeing this skill because an cyclus-ralph dispatcher (orchestrator) handed you a task envelope. You are the *executor*, not the dispatcher. Your job is narrow:
+You are seeing this skill because an cyclus-loop dispatcher (orchestrator) handed you a task envelope. You are the *executor*, not the dispatcher. Your job is narrow:
 
 1. Do exactly the task the envelope specifies, no more.
 2. Stay inside the file scope the envelope declares.
@@ -178,10 +178,10 @@ The root failure mode this prevents: chasing a phantom bug for many tool calls b
 
 ## Adjacent skills
 
-- **cyclus-ralplan-driver** — the planning side of OMH (designing the ralph plan the dispatcher then runs).
-- **cyclus-ralph-driver** — the orchestration side that hands you envelopes.
-- **cyclus-triage-driver** — the triage variant.
-- **kanban-worker** — Hermes Kanban executor discipline. Distinct system (Kanban dispatcher, not cyclus-ralph) but the worker discipline shape rhymes — file scope, structured handoff, retry-aware.
+- **cyclus-plan-dispatcher** — the planning side of OMH (designing the ralph plan the dispatcher then runs).
+- **cyclus-loop-dispatcher** — the orchestration side that hands you envelopes.
+- **cyclus-triage-dispatcher** — the triage variant.
+- **kanban-worker** — Hermes Kanban executor discipline. Distinct system (Kanban dispatcher, not cyclus-loop) but the worker discipline shape rhymes — file scope, structured handoff, retry-aware.
 - **github-pr-workflow** — when the round culminates in a PR, the dispatcher (not you) typically opens it; you ship commits the dispatcher will gather.
 
 ## See also

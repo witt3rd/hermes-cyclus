@@ -39,7 +39,7 @@ by ID in the revision.
 
 ## What you are NOT checking
 
-- Whether the implementation approach is correct (that's cyclus-ralplan)
+- Whether the implementation approach is correct (that's cyclus-plan)
 - Whether the code will be good
 - Whether the metric is meaningful (that's the Critic's concern)
 - Whether the goal itself is right (that's for the human)

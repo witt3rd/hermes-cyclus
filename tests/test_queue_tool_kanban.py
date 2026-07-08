@@ -61,7 +61,7 @@ def kanban_env(monkeypatch):
 
 def test_kanban_status(kanban_env):
     result = json.loads(cyclus_queue_handler(
-        {"action": "status", "mode": "ralph", "instance_id": "x"}, ctx=kanban_env
+        {"action": "status", "mode": "loop", "instance_id": "x"}, ctx=kanban_env
     ))
     assert result["found"] is True
     assert result["task_id"] == "t_test123"
@@ -70,7 +70,7 @@ def test_kanban_status(kanban_env):
 
 def test_kanban_write_state(kanban_env):
     result = json.loads(cyclus_queue_handler(
-        {"action": "write_state", "mode": "ralph", "instance_id": "x",
+        {"action": "write_state", "mode": "loop", "instance_id": "x",
          "state": {"iteration": 3, "best_score": 1.45}},
         ctx=kanban_env,
     ))
@@ -81,7 +81,7 @@ def test_kanban_write_state(kanban_env):
 
 def test_kanban_complete(kanban_env):
     result = json.loads(cyclus_queue_handler(
-        {"action": "complete", "mode": "ralph", "instance_id": "x",
+        {"action": "complete", "mode": "loop", "instance_id": "x",
          "terminal_state": "PlanComplete",
          "output": {"summary": "all done", "final_score": 1.49}},
         ctx=kanban_env,
@@ -92,7 +92,7 @@ def test_kanban_complete(kanban_env):
 
 def test_kanban_post_is_noop(kanban_env):
     result = json.loads(cyclus_queue_handler(
-        {"action": "post", "mode": "ralph", "instance_id": "x",
+        {"action": "post", "mode": "loop", "instance_id": "x",
          "kind": "TaskExecutionKind", "name": "test"},
         ctx=kanban_env,
     ))
@@ -102,7 +102,7 @@ def test_kanban_post_is_noop(kanban_env):
 
 def test_kanban_claim_heartbeats(kanban_env):
     result = json.loads(cyclus_queue_handler(
-        {"action": "claim", "mode": "ralph", "instance_id": "x"}, ctx=kanban_env
+        {"action": "claim", "mode": "loop", "instance_id": "x"}, ctx=kanban_env
     ))
     assert result["status"] == "claimed"
     kanban_env.kanban_heartbeat.assert_called_once()
@@ -110,7 +110,7 @@ def test_kanban_claim_heartbeats(kanban_env):
 
 def test_kanban_release_blocks(kanban_env):
     result = json.loads(cyclus_queue_handler(
-        {"action": "release", "mode": "ralph", "instance_id": "x"}, ctx=kanban_env
+        {"action": "release", "mode": "loop", "instance_id": "x"}, ctx=kanban_env
     ))
     assert result["ok"] is True
     kanban_env.kanban_block.assert_called_once()
@@ -118,7 +118,7 @@ def test_kanban_release_blocks(kanban_env):
 
 def test_kanban_cancel_blocks(kanban_env):
     result = json.loads(cyclus_queue_handler(
-        {"action": "cancel", "mode": "ralph", "instance_id": "x",
+        {"action": "cancel", "mode": "loop", "instance_id": "x",
          "reason": "user aborted"},
         ctx=kanban_env,
     ))
@@ -128,7 +128,7 @@ def test_kanban_cancel_blocks(kanban_env):
 
 def test_kanban_dispatch_is_noop(kanban_env):
     result = json.loads(cyclus_queue_handler(
-        {"action": "dispatch", "mode": "ralph", "instance_id": "x"}, ctx=kanban_env
+        {"action": "dispatch", "mode": "loop", "instance_id": "x"}, ctx=kanban_env
     ))
     assert result["dispatched"] is True
     assert result["task_id"] == "t_test123"
@@ -141,7 +141,7 @@ def test_kanban_dispatch_is_noop(kanban_env):
 
 def test_write_state_requires_dict_kanban(kanban_env):
     result = json.loads(cyclus_queue_handler(
-        {"action": "write_state", "mode": "ralph", "instance_id": "x",
+        {"action": "write_state", "mode": "loop", "instance_id": "x",
          "state": "not-a-dict"},
         ctx=kanban_env,
     ))
@@ -151,7 +151,7 @@ def test_write_state_requires_dict_kanban(kanban_env):
 
 def test_write_state_requires_dict_file(file_env):
     result = json.loads(cyclus_queue_handler(
-        {"action": "write_state", "mode": "ralph", "instance_id": "x",
+        {"action": "write_state", "mode": "loop", "instance_id": "x",
          "state": "not-a-dict"},
     ))
     assert "error" in result
@@ -159,7 +159,7 @@ def test_write_state_requires_dict_file(file_env):
 
 def test_complete_requires_terminal_state_kanban(kanban_env):
     result = json.loads(cyclus_queue_handler(
-        {"action": "complete", "mode": "ralph", "instance_id": "x"},
+        {"action": "complete", "mode": "loop", "instance_id": "x"},
         ctx=kanban_env,
     ))
     assert "error" in result
@@ -168,10 +168,10 @@ def test_complete_requires_terminal_state_kanban(kanban_env):
 
 def test_complete_requires_terminal_state_file(file_env):
     from cyclus.queue import post, claim
-    post(mode="ralph", instance_id="comp-val", kind="TaskExecutionKind", name="x")
-    claim(mode="ralph", instance_id="comp-val")
+    post(mode="loop", instance_id="comp-val", kind="TaskExecutionKind", name="x")
+    claim(mode="loop", instance_id="comp-val")
     result = json.loads(cyclus_queue_handler(
-        {"action": "complete", "mode": "ralph", "instance_id": "comp-val"},
+        {"action": "complete", "mode": "loop", "instance_id": "comp-val"},
     ))
     assert "error" in result
 
@@ -185,7 +185,7 @@ def test_kanban_env_without_ctx_returns_error(kanban_env, monkeypatch):
     """When HERMES_KANBAN_TASK is set but no ctx, return error — don't silently
     fall back to the file backend and diverge from the Kanban dispatcher."""
     result = json.loads(cyclus_queue_handler(
-        {"action": "status", "mode": "ralph", "instance_id": "x"},
+        {"action": "status", "mode": "loop", "instance_id": "x"},
         # no ctx= kwarg
     ))
     assert "error" in result
@@ -221,7 +221,7 @@ def test_kanban_write_state_comment_truncated_if_large(kanban_env):
     """Large state payloads are truncated before posting to Kanban."""
     big_lessons = ["lesson " + "x" * 100] * 50
     result = json.loads(cyclus_queue_handler(
-        {"action": "write_state", "mode": "ralph", "instance_id": "x",
+        {"action": "write_state", "mode": "loop", "instance_id": "x",
          "state": {"iteration": 1, "lessons": big_lessons}},
         ctx=kanban_env,
     ))

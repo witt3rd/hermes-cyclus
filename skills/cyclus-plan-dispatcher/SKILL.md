@@ -1,6 +1,6 @@
 ---
-name: cyclus-ralplan-driver
-description: "Drive cyclus-ralplan: context package, rounds, distillation."
+name: cyclus-plan-dispatcher
+description: "Drive cyclus-plan: context package, rounds, distillation."
 version: 1.1.0
 metadata:
   hermes:
@@ -9,10 +9,10 @@ metadata:
     requires_toolsets: [terminal, omh]
 ---
 
-# OMH Ralplan Driver — driving the loop
+# OMH Plan Dispatcher — driving the loop
 
-Load this skill alongside `cyclus-ralplan` when you are the orchestrator
-dispatching the loop. `cyclus-ralplan` is loaded by the Planner / Architect
+Load this skill alongside `cyclus-plan` when you are the orchestrator
+dispatching the loop. `cyclus-plan` is loaded by the Planner / Architect
 / Critic *workers* — it covers what they do inside each `delegate_task`
 call. This skill covers what *you* do as the dispatcher: prep, dispatch,
 distill, review.
@@ -56,7 +56,7 @@ Use ralplan when the work has:
 
 Don't use ralplan when the work is single-file, single-decision, or
 obvious-to-solve. Overkill is its own failure mode. Use
-`cyclus-deep-interview` first if the goal is ambiguous.
+`cyclus-interview` first if the goal is ambiguous.
 
 ## The five-step playbook
 
@@ -1093,7 +1093,7 @@ need to surface them unless one of them rises to a user-decision.
 
 Load role prompt before delegating:
 ```
-role_prompt = skill_view(name="cyclus-ralplan", file_path="references/role-planner.md")
+role_prompt = skill_view(name="cyclus-plan", file_path="references/role-planner.md")
 # If empty, abort: "Role prompt unavailable — cannot dispatch."
 ```
 
@@ -1161,7 +1161,7 @@ separate from the design directory. Outside the design artifact lineage.
 ## State tracked via cyclus_queue
 
 ```
-cyclus_queue(action="write_state", mode="ralplan", instance_id="<slug>", state={
+cyclus_queue(action="write_state", mode="plan", instance_id="<slug>", state={
     "goal": "...",
     "round": 1,  # or 2 / 3
     "phase": "context-gathering | round-N-<role> | complete",
@@ -1174,11 +1174,11 @@ cyclus_queue(action="write_state", mode="ralplan", instance_id="<slug>", state={
 
 After each round completes and the skill exits cleanly, call `release()`:
 ```
-cyclus_queue(action="release", mode="ralplan", instance_id="<slug>")
+cyclus_queue(action="release", mode="plan", instance_id="<slug>")
 ```
 
 This is the session-resumable state. Check for an active work item via
-`cyclus_queue(action="status", mode="ralplan", instance_id="<slug>")` — returns
+`cyclus_queue(action="status", mode="plan", instance_id="<slug>")` — returns
 `None` if no active run exists. If the orchestrator session is interrupted,
 the next session checks this and resumes.
 

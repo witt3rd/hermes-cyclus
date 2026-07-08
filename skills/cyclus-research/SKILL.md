@@ -1,5 +1,5 @@
 ---
-name: cyclus-deep-research
+name: cyclus-research
 description: parallel web research; subagents→synthesis→cite-verify
 version: 2.0.0
 metadata:
@@ -25,8 +25,8 @@ when the gap list is empty or the evaluator judges evidence sufficient.
 
 - The user asks for "deep research on", "a research report about",
   "comprehensive research", "investigate X", "what's known about Y"
-- cyclus-deep-interview encounters an unfamiliar domain and needs background
-- cyclus-ralplan needs external context before it can plan responsibly
+- cyclus-interview encounters an unfamiliar domain and needs background
+- cyclus-plan needs external context before it can plan responsibly
 - The user's question requires synthesizing 3+ web sources into one
   coherent answer, not a single search
 
@@ -46,7 +46,7 @@ This skill fail-fasts if any of the following are missing:
 - **`web` toolset** — provides `web_search` AND `web_extract`. If either
   is unavailable, print:
   ```
-  cyclus-deep-research requires the `web` toolset (web_search + web_extract); aborting.
+  cyclus-research requires the `web` toolset (web_search + web_extract); aborting.
   ```
   and exit before doing any work.
 - **`cyclus_queue` tool** — always available (zero-config embedded SQLite backend).
@@ -54,13 +54,13 @@ This skill fail-fasts if any of the following are missing:
   supported.
 - **Write access** to `.omh/` for state, plan, findings, report, log.
 
-Hermes discovery: `hermes skills list | grep cyclus-deep-research` should
+Hermes discovery: `hermes skills list | grep cyclus-research` should
 return this skill once installed.
 
 ### Installation (symlink for Hermes discovery)
 
 ```
-mkdir -p ~/.hermes/skills/omh && ln -snf <repo>/plugins/omh/skills/cyclus-deep-research ~/.hermes/skills/omh/cyclus-deep-research
+mkdir -p ~/.hermes/skills/omh && ln -snf <repo>/plugins/omh/skills/cyclus-research ~/.hermes/skills/omh/cyclus-research
 ```
 
 Parent dir creation MUST precede the symlink.
@@ -371,7 +371,7 @@ all web tool use happens inside delegated subagents.
 
 Append-only events to `.omh/logs/research-{session_id}.log`. Events are
 decisions and phase transitions only — never findings content (matches
-the cyclus-deep-interview convention).
+the cyclus-interview convention).
 
 Documented event vocabulary:
 
@@ -391,7 +391,7 @@ Documented event vocabulary:
 
 ## Sentinel
 
-Downstream skills (cyclus-deep-interview, cyclus-ralplan, cyclus-autopilot) detect
+Downstream skills (cyclus-interview, cyclus-plan, cyclus-autopilot) detect
 a completed research session by:
 
 ```

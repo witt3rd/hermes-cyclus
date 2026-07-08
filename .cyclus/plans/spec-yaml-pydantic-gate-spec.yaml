@@ -15,4 +15,4 @@ target_files:
   - examples/circle_packing/README.md
   - examples/test_coverage/spec.yaml
   - examples/test_coverage/README.md
-  - skills/cyclus-ralph/SKILL.md
+  - skills/cyclus-loop/SKILL.md

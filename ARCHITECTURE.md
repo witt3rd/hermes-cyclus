@@ -21,21 +21,21 @@ combination is valid.
 | Kind | Use when | Skill |
 |------|----------|-------|
 | **`/goal`** *(Hermes primitive)* | Open-ended goal, no plan needed. Judge decides when done. | — (built-in) |
-| **`TaskExecutionKind`** | Structured plan with per-task evidence requirements. More disciplined than `/goal`. | cyclus-ralph |
-| **`ConsensusKind`** | Multi-role deliberation (Planner + Architect + Critic + DRI) to produce a plan or decision. | cyclus-ralplan |
-| **`InformationSeekingKind`** | Research until a sufficiency threshold is reached. | cyclus-deep-research |
-| **`ClarificationKind`** | Elicit requirements from a human. **HUMAN_GATED** — only an explicit human `complete()` ends it. `/goal` cannot do this. | cyclus-deep-interview |
+| **`TaskExecutionKind`** | Structured plan with per-task evidence requirements. More disciplined than `/goal`. | cyclus-loop |
+| **`ConsensusKind`** | Multi-role deliberation (Planner + Architect + Critic + DRI) to produce a plan or decision. | cyclus-plan |
+| **`InformationSeekingKind`** | Research until a sufficiency threshold is reached. | cyclus-research |
+| **`ClarificationKind`** | Elicit requirements from a human. **HUMAN_GATED** — only an explicit human `complete()` ends it. `/goal` cannot do this. | cyclus-interview |
 | **`MetricOptimizationKind`** | hypothesis → measure → keep/revert until metric target is reached. | cyclus-autoresearch *(Arc 2)* |
 | **`SelectionKind`** | Generate N candidates, rank by fitness, keep top-k, repeat. | *(future)* |
 
 **`/goal` vs cyclus skills:** `/goal` is the simplest loop — use it when the goal is
 open-ended and you don't need plan discipline. Cyclus skills add structure on top:
 committed plans, per-task evidence contracts, typed terminal algebras, HITL gates.
-When Kanban dispatches a cyclus-ralph worker with `goal_mode=True`, the Kanban judge
+When Kanban dispatches a cyclus-loop worker with `goal_mode=True`, the Kanban judge
 checks whether the plan is complete — `/goal` IS the judge.
 
-**Typical flow:** cyclus-ralplan produces a plan → cyclus-ralph executes it.
-Or: cyclus-deep-interview clarifies requirements → cyclus-ralplan designs → cyclus-ralph executes.
+**Typical flow:** cyclus-plan produces a plan → cyclus-loop executes it.
+Or: cyclus-interview clarifies requirements → cyclus-plan designs → cyclus-loop executes.
 
 ---
 
@@ -100,9 +100,9 @@ Without a built-in dispatcher, a parent agent drives the loop.
 
 **Serial (driver skill as dispatcher):**
 ```
-cyclus-ralph-driver (parent):
+cyclus-loop-dispatcher (parent):
   loop:
-    delegate_task(cyclus-ralph worker, context=current_task)  ← blocks until done
+    delegate_task(cyclus-loop worker, context=current_task)  ← blocks until done
     read result
     if not terminal: loop again
     if terminal: stop
@@ -219,7 +219,7 @@ output_dir: .cyclus/state/kanban--function-minimization/
 Maturity levels: **L1** (propose only) → **L2** (apply + confirm) → **L3** (autonomous).
 All specs start at L1. Trust is earned through demonstrated L1 behaviour.
 
-`load_spec()` is the planning gate — every cyclus-ralph run validates the spec
+`load_spec()` is the planning gate — every cyclus-loop run validates the spec
 before parsing the plan. A `ValidationError` halts immediately.
 
 ---
@@ -248,7 +248,7 @@ Runtime state lives in `.cyclus/` in the user's project — committed following 
 Skills never call `kanban_*` or Saturate APIs directly. They call `cyclus_queue`:
 
 ```python
-cyclus_queue(action="write_state", mode="ralph", instance_id="my-plan",
+cyclus_queue(action="write_state", mode="loop", instance_id="my-plan",
              state={"iteration": 3, "best_score": 1.47})
 ```
 
@@ -263,10 +263,10 @@ cyclus_queue(action="write_state", mode="ralph", instance_id="my-plan",
 
 | Skill | Loop kind | Serial | Swarm | Driver skill (file backend) |
 |-------|-----------|--------|-------|----------------------------|
-| cyclus-ralph | `TaskExecutionKind` | ✅ | ✅ *(different tasks in parallel)* | cyclus-ralph-driver |
-| cyclus-ralplan | `ConsensusKind` | ✅ | — | cyclus-ralplan-driver |
-| cyclus-deep-research | `InformationSeekingKind` | ✅ | — | *(uses delegate_task internally)* |
-| cyclus-deep-interview | `ClarificationKind` *(HUMAN_GATED)* | ✅ | — | *(interactive only)* |
+| cyclus-loop | `TaskExecutionKind` | ✅ | ✅ *(different tasks in parallel)* | cyclus-loop-dispatcher |
+| cyclus-plan | `ConsensusKind` | ✅ | — | cyclus-plan-dispatcher |
+| cyclus-research | `InformationSeekingKind` | ✅ | — | *(uses delegate_task internally)* |
+| cyclus-interview | `ClarificationKind` *(HUMAN_GATED)* | ✅ | — | *(interactive only)* |
 | cyclus-autoresearch | `MetricOptimizationKind` | ✅ | ✅ | *(Arc 2)* |
 
 ---
