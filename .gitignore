@@ -18,15 +18,12 @@ coverage.json
 htmlcov/
 .tox/
 
-# Cyclus runtime state — never committed; lives only on the running machine
-.cyclus/
+# Cyclus runtime state — .cyclus/ is committed but its own .gitignore
+# excludes queue JSON, state dirs, etc. Plans are tracked.
+# (do NOT add .cyclus/ here — that would override .cyclus/.gitignore)
 
 # OMH legacy runtime state
 .omh/
-
-# Human-readable loop summaries — generated, not source of truth
-STATE.md
-LOOP.md
 
 # IDE
 .idea/
