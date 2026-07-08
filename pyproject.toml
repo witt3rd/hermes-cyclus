@@ -9,6 +9,7 @@ requires-python = ">=3.11"
 dependencies = [
     "pyyaml>=6.0",
     "pydantic>=2.0",
+    "loop-spec-py",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +37,9 @@ line-length = 100
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
+
+[tool.uv.sources]
+loop-spec-py = { path = "../loop-spec/python" }
 
 [dependency-groups]
 dev = [

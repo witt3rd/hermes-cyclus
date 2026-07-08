@@ -1,12 +1,12 @@
 """
-Tests for cyclus/specs.py — load_spec() and model validation.
+Tests for loop spec models and load_spec() — via loop_spec library.
 
-Tests cover:
-  - load_spec() roundtrip for MetricOptimizationSpec and TaskExecutionSpec
-  - Default terminal conditions (max_iterations=100)
-  - Error paths: missing kind, unknown kind, FileNotFoundError, malformed YAML
-  - Model-level validation: required fields, ClarificationSpec.HUMAN_GATED invariant
+cyclus.specs re-exports from loop_spec (https://github.com/witt3rd/loop-spec).
+Imports go through cyclus.specs for backward compatibility.
 
+Covers: load_spec() roundtrip, default terminal conditions, error paths
+(missing kind, unknown kind, FileNotFoundError, malformed YAML), and
+model-level validation (required fields, ClarificationSpec.HUMAN_GATED).
 No network or external deps; tmp_path fixture isolates all file I/O.
 """
 from __future__ import annotations
