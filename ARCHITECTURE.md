@@ -173,31 +173,29 @@ The worker skill is **identical** across all three backends. Only the dispatcher
 | **File-based** | Parent `delegate_task` agent | Parent re-dispatches after child returns | Parent dispatches N children in parallel batch, collects best |
 | **Saturate** | Saturate scheduler process | Heartbeat timeout → re-queue → re-dispatch | `BatchKind` tasks with `SpawnPolicy` — N parallel `MetricOptimizationKind` workers + synthesizer |
 
-### Saturate swarm via BatchKind *(Arc 2 — not yet built)*
+### Saturate swarm via BatchKind
 
-The intended Saturate swarm primitive is a `BatchKind` task that fans out to N
+Saturate's `BatchKind` is the swarm primitive. A `BatchKind` task fans out to N
 child `MetricOptimizationKind` workers (each with a different hypothesis seed),
-collects results via `depends_on` edges, and a synthesizer picks the winner.
-`BatchKind` and `SpawnPolicy` do not yet exist in Saturate or loop-spec —
-this is the design target for Arc 2.
+collects results via `depends_on` edges, and a synthesizer worker picks the winner.
 
 ```python
-# (Arc 2 design — not yet implemented)
+# Producer posts a BatchKind task
 queue.post(BatchSpec(
     workers=N,
     child_kind=MetricOptimizationKind,
     child_spec=spec,
     synthesizer=SynthesizerSpec(strategy="best_metric"),
 ))
-# Saturate scheduler would spawn N child tasks automatically via SpawnPolicy
+# Saturate scheduler spawns N child tasks automatically via SpawnPolicy
 ```
 
-The `spawn` field on `MetricOptimizationSpec` (serial loop graduates to swarm
-on stagnation) is similarly a forward design — not in loop-spec yet. When it
-lands, it lands in loop-spec first; Saturate and Cyclus adopt together.
+The `spawn` field in `MetricOptimizationSpec` declares whether a loop may
+spawn child loops (e.g., when stagnated: try N parallel hypotheses, restart
+from best). This is how a serial loop graduates to swarm when it gets stuck.
 
-The worker skill is identical across serial and swarm topologies — that
-invariant holds regardless of when swarm ships.
+The worker skill never needs to know whether it is in a serial or swarm topology.
+The spec and state_path are the same either way.
 
 ---
 
