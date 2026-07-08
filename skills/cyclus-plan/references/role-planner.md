@@ -4,7 +4,7 @@ Used as the `goal` field in `delegate_task` for Round 1 Planner. Adapt
 the variables. Keep the structure — each section earns its place.
 
 ```
-[omh-role:planner] <ONE-LINE DESIGN QUESTION — concrete, not vague>
+[cyclus-role:planner] <ONE-LINE DESIGN QUESTION — concrete, not vague>
 
 THIS IS A DESIGN STANCE, NOT AN IMPLEMENTATION PLAN. Implementation
 flows from the stance later; your job is to take positions and

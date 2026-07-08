@@ -1,7 +1,7 @@
 # Architect final review template
 
 Used as the `goal` field in `delegate_task` for the Step 7 final
-architect review — the merge gate at the end of a ralph run, after
+architect review — the merge gate at the end of a loop run, after
 all tasks have `passes: true`. This is the orchestrator's last gate
 before handing the user a PR-ready branch.
 
@@ -11,7 +11,7 @@ all tasks, against the original plan/stance, with attention to seams
 the per-task verifiers couldn't see.
 
 ```
-[omh-role:architect] Final review of <domain> ralph run for merge readiness.
+[cyclus-role:architect] Final review of <domain> loop run for merge readiness.
 
 ## Project root + branch
 
@@ -29,7 +29,7 @@ The original design (read first):
 - <absolute path to PRINCIPLES.md or directives>
 
 The plan that was executed:
-- <absolute path to .omh/plans/ralph-plan.md or ralplan-<slug>.md>
+- <absolute path to .cyclus/plans/plan-{slug}.md or plan-{slug}.md>
 
 The implementation (the full diff range):
 - `git log --oneline <base>..<head>` — N implementation commits
@@ -37,10 +37,10 @@ The implementation (the full diff range):
   diff range, not just check tip-of-tree)
 
 The orchestrator's iteration log (if present):
-- <absolute path to .omh/logs/ralph-progress.md or domain equivalent>
+- <absolute path to .cyclus/logs/loop-progress.md or domain equivalent>
 
 Per-task state:
-- `.omh/state/loop-tasks--<instance_id>.json` for verifier verdicts +
+- `.cyclus/state/loop-tasks--<instance_id>.json` for verifier verdicts +
   forward-encoded learnings.
 
 ## Your job
@@ -120,7 +120,7 @@ Structure:
   surfaces, in `discovered: true` shape, ready for the orchestrator to
   add to loop-tasks state.
 - **What this run proved about the plan:** any plan-shape feedback
-  worth folding into future ralplan/ralph runs.
+  worth folding into future plan/loop runs.
 ```
 
 ## The three verdicts
@@ -161,7 +161,7 @@ Something cannot ship as-is. The architect surfaces:
 - An architectural drift between stance and implementation that
   must be reconciled before merge.
 
-The ralph loop resumes with these tasks; the architect re-reviews on
+The loop resumes with these tasks; the architect re-reviews on
 the next Step 7 cycle.
 
 ## Key things to include EVERY time
@@ -200,7 +200,7 @@ not.
 
 > Verdict: APPROVE_WITH_PROVISO
 >
-> The 13-task janus-migration ralph run honored the stance: lineage
+> The 13-task janus-migration loop run honored the stance: lineage
 > capture lands at `bin/janus-new-being`, `classify()` ships taxonomy-
 > as-criterion (P-reuse), the v1→v2 migrations machinery exists at
 > `migrations/lib.py:hash_equals_ancestor`. MV slice walks cleanly:

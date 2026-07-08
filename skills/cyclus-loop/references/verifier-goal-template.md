@@ -11,7 +11,7 @@ the executor's interpretation of them. The orchestrator runs evidence
 executor self-reporting.
 
 ```
-[omh-role:verifier] Verify Task <N> — <one-line task title>
+[cyclus-role:verifier] Verify Task <N> — <one-line task title>
 
 ## Project root + branch
 

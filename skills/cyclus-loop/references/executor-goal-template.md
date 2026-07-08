@@ -6,7 +6,7 @@ the structure — every section earns its place because the subagent has
 NO memory of prior iterations, prior tasks, prior conversations.
 
 ```
-[omh-role:executor] Task <N> — <one-line task title from the plan>
+[cyclus-role:executor] Task <N> — <one-line task title from the plan>
 
 ## Project root + branch
 
