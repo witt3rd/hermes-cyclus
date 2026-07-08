@@ -1,179 +1,186 @@
 ---
 name: cyclus-plan
-description: "Planner+Architect+Critic→consensus impl plan (≤3 rounds)"
-version: 2.0.0
+description: "ConsensusKind: Planner+Architect+Critic deliberate to produce a verified implementation plan"
+version: 3.0.0
 metadata:
   hermes:
-    tags: [planning, multi-agent, consensus, architecture]
-    category: omh
-    requires_toolsets: [terminal, omh]
+    tags: [planning, multi-agent, consensus, architecture, cyclus]
+    category: cyclus
+    requires_toolsets: [terminal, file]
 ---
 
-# Cyclus Plan — Consensus Planning
+# cyclus-plan
 
-> **Loop kind:** This skill implements a `ConsensusKind` loop.  
-> Turn results: `RoundComplete | ConsensusReached`  
-> Terminal states: `ConsensusTerminalReached | Deadlocked`  
-> Max rounds: 3 (caveated output if no consensus by round 3)
+**Loop kind:** `ConsensusKind`  
+**Turn results:** `RoundComplete | ConsensusReached`  
+**Terminal states:** `ConsensusTerminalReached | Deadlocked`  
+**Max rounds:** 3
+
+---
 
 ## When to Use
 
-- Before implementing any feature that touches multiple files or components
-- When architectural decisions need validation from multiple perspectives
-- When you need a plan that's been stress-tested against adversarial critique
-- When the user says: "plan this", "consensus plan", "ralplan", "let's think this through"
+- Before implementing anything that touches multiple files or components
+- When architectural decisions need adversarial validation
+- When the user says: "plan this", "let's think this through", "design first"
+- When `cyclus-interview` has clarified the requirements and you have a clear goal
 
-## When NOT to Use
-
+Don't use when:
 - Trivial single-file changes (just do them)
-- Tasks where the approach is obvious and low-risk
-- When the user explicitly wants to skip planning
+- Goal is still ambiguous — use `cyclus-interview` first
+- User explicitly wants to skip planning
 
-## Prerequisites
+---
 
-- A clear goal or specification (if ambiguous, use `cyclus-interview` first)
-- The `delegate_task` tool must be available
+## Dispatcher Prep (do this before Phase 1)
+
+Quality is born in prep. The Planner/Architect/Critic triangle converges on internal
+consistency — it will produce coherent output about *whatever you point it at*, including
+the wrong frame. The dispatcher is the only role with the vantage to prevent this.
+
+### 1. Carve principles first
+
+Ralplan without principles produces plausibly-reasoned nonsense. If no `PRINCIPLES.md`
+exists, draft a short one (≤15 entries, each naming the failure it prevents) before
+dispatching. Even a rough draft beats unprincipled planning.
+
+### 2. Author a context package (~500 words)
+
+Not a prompt — a living document. Read the relevant source before writing it:
+- Project structure, active conventions, constraints
+- Adjacent mechanisms the plan must not duplicate
+- Any design decisions already made (don't let subagents re-debate them)
+- The user's lived context (half of requirements only the user knows)
+
+If the package exceeds ~1000 words, it's bloated. Cut to the load-bearing facts.
+
+### 3. Verify ground truth
+
+Read the actual source, not summaries. If designing against another system, pass
+file paths to subagents so they read the implementation directly. Summaries lose
+critical field names, state schemas, and design patterns.
+
+---
 
 ## Procedure
 
-### Phase 0: Context Gathering
+### Phase 0: Gather context
 
-Before planning, gather project context:
-1. Read relevant files to understand the codebase structure
-2. Identify existing patterns, conventions, and constraints
-3. Summarize context into a brief (~500 words) that all agents will receive
+1. Read relevant files to understand codebase structure and conventions
+2. Summarize into a brief (~500 words) — this is the context package all subagents receive
+3. Post and claim the work item:
+   ```
+   cyclus_queue(action="post", mode="plan", instance_id="{slug}", kind="ConsensusKind", name="Plan: {goal}")
+   cyclus_queue(action="claim", mode="plan", instance_id="{slug}")
+   ```
 
-### Phase 1: Planning Loop (max 3 rounds)
+### Phase 1: Planning loop (max 3 rounds)
 
-**Round 1 — All Sequential** (Planner → Architect → Critic):
-
-**Step 1 — Planner** (single delegate_task)
-
-Load the planner role prompt before delegating:
+Load all role prompts via `skill_view` before dispatching — never inline them:
 ```
-planner_prompt = skill_view(name="cyclus-plan", file_path="references/role-planner.md")
+planner_prompt  = skill_view(name="cyclus-plan", file_path="references/role-planner.md")
+architect_prompt= skill_view(name="cyclus-plan", file_path="references/role-architect.md")
+critic_prompt   = skill_view(name="cyclus-plan", file_path="references/role-critic.md")
 ```
-If `skill_view` returns empty or raises, abort: "Role prompt unavailable — cannot dispatch without role context."
+If any `skill_view` call returns empty, abort: "Role prompt unavailable."
 
-```
+**Round 1 — Sequential (Planner → Architect → Critic):**
+
+```python
+# Step 1: Planner
 delegate_task(
     goal="Create an implementation plan for: {goal}\n\n{detailed_requirements}",
-    context="# Project Context\n\n{project_context}\n\n## Role\n\n{planner_prompt}"
+    context="# Project Context\n\n{context_package}\n\n## Role\n\n{planner_prompt}"
 )
-```
-The goal should include the full specification — don't assume the subagent knows anything.
 
-**Step 2 — Architect Review** (single delegate_task)
-
-Load the architect role prompt before delegating:
-```
-architect_prompt = skill_view(name="cyclus-plan", file_path="references/role-architect.md")
-```
-If `skill_view` returns empty or raises, abort: "Role prompt unavailable — cannot dispatch without role context."
-
-```
+# Step 2: Architect review
 delegate_task(
-    goal="Review this implementation plan for architectural soundness:\n\nPLAN:\n{planner_output}",
-    context="# Project Context\n\n{project_context}\n\n## Role\n\n{architect_prompt}"
+    goal="Review this plan for architectural soundness:\n\nPLAN:\n{planner_output}",
+    context="# Project Context\n\n{context_package}\n\n## Role\n\n{architect_prompt}"
 )
-```
 
-**Step 3 — Critic Challenge** (single delegate_task)
-
-Load the critic role prompt before delegating:
-```
-critic_prompt = skill_view(name="cyclus-plan", file_path="references/role-critic.md")
-```
-If `skill_view` returns empty or raises, abort: "Role prompt unavailable — cannot dispatch without role context."
-
-```
+# Step 3: Critic challenge
 delegate_task(
-    goal="Critically challenge this plan and architect review:\n\nPLAN SUMMARY:\n{plan_summary}\n\nARCHITECT REVIEW:\n{architect_verdict_and_concerns}",
-    context="# Project Context\n\n{project_context}\n\n## Role\n\n{critic_prompt}"
+    goal="Challenge this plan:\n\nPLAN:\n{plan_summary}\n\nARCHITECT:\n{architect_verdicts}",
+    context="# Project Context\n\n{context_package}\n\n## Role\n\n{critic_prompt}"
 )
 ```
 
-**Step 4 — Consensus Check**
-Check all three verdicts:
-- If ALL three are APPROVE → consensus reached, proceed to output
-- If any is REQUEST_CHANGES → collect all feedback, proceed to Round 2
-- If any is REJECT → output concerns and ask user whether to continue
+**Consensus check:** All three APPROVE → proceed to output.
+Any REQUEST_CHANGES → collect all feedback (label A1/A2/C1/C2/W1), go to Round 2.
+Any REJECT → surface to user.
 
-**Round 2+ — Planner Revises, Architect + Critic Re-review in Parallel**:
+**Round 2+ — Planner revises; Architect + Critic re-review in parallel:**
 
-When looping, the Planner must receive ALL feedback (Architect concerns + Critic critical issues + warnings). Be explicit about what needs to change — include the specific concern IDs (A1, C1, W1, etc.).
+```python
+# Planner revises with ALL feedback
+delegate_task(goal="Revise plan addressing: A1: {}, C1: {}", context="{context_package}\n\n{planner_prompt}")
 
-For Round 2 re-reviews, Architect and Critic are independent — run them in parallel via batch delegate_task. Re-use `architect_prompt` and `critic_prompt` loaded in Round 1:
-```
+# Parallel re-review (saves ~100s vs sequential)
 delegate_task(tasks=[
-    {goal: "Re-review revised plan:\n{revised_plan}\n\nPrior concerns: {architect_concerns}", context: "{project_context}\n\n## Role\n\n{architect_prompt}"},
-    {goal: "Re-review revised plan:\n{revised_plan}\n\nPrior concerns: {critic_concerns}", context: "{project_context}\n\n## Role\n\n{critic_prompt}"}
+    {"goal": "Re-review revised plan:\n{revised}\n\nPrior concerns: {architect_concerns}", "context": "{context_package}\n\n{architect_prompt}"},
+    {"goal": "Re-review revised plan:\n{revised}\n\nPrior concerns: {critic_concerns}",   "context": "{context_package}\n\n{critic_prompt}"},
 ])
 ```
-This saves significant time (Round 2 re-reviews ran 14 seconds parallel vs ~120 seconds sequential).
 
-### Phase 2: Output
-
-Write the consensus plan to `.omh/plans/ralplan-{slug}.md` containing:
-1. Consensus status (rounds, verdicts per round)
-2. Revision summary (what changed from feedback)
-3. The final plan (tasks with dependencies, complexity, acceptance criteria)
-4. Risks and open questions
-5. Round count and consensus status
-
-Use a descriptive slug, not a timestamp: `ralplan-deep-interview-consensus.md` not `ralplan-20260407.md`.
-
-Also write a summary to the user with the key design decisions that emerged from the debate.
-
-## State Management
-
-State is per-instance, keyed on the plan slug (`instance_id="{slug}"`).
-Multiple ralplan sessions on different goals can run concurrently.
-
-Use the `cyclus_queue` tool for state persistence:
-
-**Post a work item (first invocation):**
-```
-cyclus_queue(action="post", mode="plan", instance_id="{slug}",
-    kind="ConsensusKind", name="Ralplan: {goal_summary}")
-```
-
-**Write state after each phase:**
+Write state after each phase:
 ```
 cyclus_queue(action="write_state", mode="plan", instance_id="{slug}", state={
-    "goal": "...", "round": 1,
-    "phase": "planner|architect|critic|complete",
-    "consensus": False, "plan_file": ".omh/plans/ralplan-{slug}.md"
+    "goal": "...", "round": N, "phase": "planner|architect|critic|complete",
+    "consensus": false, "plan_file": ".cyclus/plans/plan-{slug}.md"
 })
 ```
 
-After each round completes and the skill exits cleanly, release the item:
+### Phase 2: Output
+
+Write the consensus plan to `.cyclus/plans/plan-{slug}.md`:
+1. Consensus status (rounds, verdicts per round)
+2. Revision summary (what changed and why)
+3. Final plan (tasks with dependencies, acceptance criteria)
+4. Risks and open questions
+
+Use descriptive slugs: `plan-auth-refactor.md` not `plan-20260707.md`.
+
+Summarize key design decisions to the user.
+
+Complete the work item:
 ```
-cyclus_queue(action="release", mode="plan", instance_id="{slug}")
+cyclus_queue(action="complete", mode="plan", instance_id="{slug}", terminal_state="ConsensusReached")
 ```
 
-If a ralplan session is interrupted, check for an active work item and resume
-from the last completed phase:
-```
-item = cyclus_queue(action="status", mode="plan", instance_id="{slug}")
-# Returns None if no active run exists for this slug.
-# When present, read item["state_path"] to load the last written state JSON.
-```
+**Deliberate mode:** When the user requests ADR format, load `references/adr-template.md`
+and have the Architect produce Architecture Decision Record output.
 
-## Deliberate Mode (--deliberate)
-
-When the user requests deliberate mode or uses "deliberate", "ADR", or "decision record", the Architect's output should follow Architecture Decision Record (ADR) format. Load `references/adr-template.md` for the template.
+---
 
 ## Pitfalls
 
-- **Load role prompts via `skill_view` before each `delegate_task` call** — use `skill_view(name="cyclus-plan", file_path="references/role-{role}.md")` and pass the result as `context`. If `skill_view` returns empty, abort with "Role prompt unavailable." Do NOT inline role prompts manually; the old role-marker injection mechanism has been retired.
-- **Include full specifications in the goal** — subagents start with zero context. The goal + context must be self-contained.
-- **Run Round 2+ reviews in parallel** — Architect and Critic are independent in re-review rounds. Use batch delegate_task to save time.
-- **Summarize feedback with IDs for the Planner** — when looping, label feedback as A1/A2/C1/C2/W1 etc. so the Planner can address each point explicitly and the reviewers can check each one off.
-- Don't let the loop run more than 3 rounds — if no consensus by round 3, output with caveats
-- Each subagent must receive the project context, not just the plan — they need to evaluate against reality
-- The Critic should challenge, not block — if issues are minor, APPROVE with reservations
-- If the goal is ambiguous, stop and suggest `cyclus-interview` instead of planning with unclear requirements
-- **Use todo tracking** — update a todo list with round/phase status so the user sees progress during what can be a 5-10 minute process
-- **When porting/adapting from a reference system, feed actual source to subagents** — if designing a skill inspired by another system (e.g., OMC → Hermes), the Planner, Architect, and Critic must read the actual source implementation, not just briefs or summaries. Extract reference docs from the source repo first, pass file paths in the delegate_task goal so subagents read them. Summaries lose critical field names, state schemas, edge cases, and design patterns.
-- **The Critic's simplicity test can change architecture** — don't dismiss it. In the ralph consensus, the Critic proposed one-task-per-invocation (instead of an in-session loop) which both reviewers then approved as fundamentally better. The consensus process finds the right architecture, not just validates the proposed one.
+**P1 — No principles.** Dispatching without principles produces coherent-but-wrong plans. Carve principles first.
+
+**P2 — Stale source.** Subagents inherit summaries instead of reading actual code. Pass file paths, not summaries.
+
+**P3 — Inline role prompts.** Always load via `skill_view` — never hardcode role text in the goal string.
+
+**P4 — Sequential Round 2+ reviews.** Architect and Critic are independent in re-review; run them in parallel.
+
+**P5 — Vague feedback labels.** Label all feedback A1/A2/C1/C2/W1 so the Planner can address each explicitly.
+
+**P6 — Round bloat.** Cap at 3 rounds. If no consensus, output with caveats rather than loop indefinitely.
+
+**P7 — Ambiguous goal.** If requirements are unclear, stop and suggest `cyclus-interview` first.
+
+**P8 — Critic as blocker.** Minor issues should be APPROVE with reservations, not REJECT. The Critic challenges, not vetoes.
+
+**P9 — Dispatcher skips context package.** Subagents must receive project context, not just the plan text.
+
+---
+
+## References (internal — not user-facing skills)
+
+- `references/role-planner.md` — Planner role prompt (load via `skill_view` before dispatch)
+- `references/role-architect.md` — Architect role prompt
+- `references/role-critic.md` — Critic role prompt
+- `references/adr-template.md` — Architecture Decision Record template for deliberate mode
+- `references/brief-template.md` — Context package template
+- `references/orchestrator-review-template.md` — Final review checklist
+
