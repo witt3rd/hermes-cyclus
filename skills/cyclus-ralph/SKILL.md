@@ -118,7 +118,7 @@ Before checking for plan files, look for a spec.yaml at:
 - A path recorded in the work item's state
 
 If found:
-1. Run: `python -c "from cyclus.specs import load_spec; load_spec('{path}')"`
+1. Run: `python -c "from loop_spec import load_spec; load_spec('{path}')"`
    (via terminal tool or cyclus_evidence with a single command)
 2. If it exits nonzero (ValidationError or ValueError): **halt immediately.**
    Report the exact error to the user. Do NOT proceed to plan parsing.
