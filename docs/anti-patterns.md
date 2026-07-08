@@ -63,9 +63,9 @@ When N Saturate workers run the same loop in parallel, each worker's token and
 compute cost multiplies by N. A loop without a budget cap can exhaust resources
 across the whole fleet.
 
-**Fix:** See issue [#2](https://github.com/witt3rd/hermes-cyclus/issues/2) for the
-`budget_exhausted` queue variant. Set `max_cost` or token budget in the loop spec.
-This is especially critical for distributed execution.
+**Fix:** Set `budget_tokens` in the loop spec (tracked in
+[loop-spec #4](https://github.com/witt3rd/loop-spec/issues/4)). This is especially
+critical for distributed execution — unattended loops at scale need a hard cost ceiling.
 
 ### 7. Verifier theater
 
@@ -73,9 +73,11 @@ Marking a hypothesis as improved without actually running the eval command. This
 happens when a verifier agent reasons about whether the change *should* improve the
 metric rather than measuring whether it *did*.
 
-**Fix:** The eval must run. Its JSON output — specifically `combined_score` — is
-the only valid metric. Any verification step that does not invoke the eval command
-and parse its output is theater. Treat missing or malformed eval output as `score=0`.
+**Fix:** The eval must run. Its output — parsed via the `metric:` field configured
+in the loop spec (e.g., `json:combined_score`, `json:coverage_percent`) — is the
+only valid measurement. Any verification step that does not invoke the eval command
+and parse its output is theater. Treat missing or malformed eval output as a crash,
+not a score.
 
 ---
 
@@ -89,10 +91,15 @@ These are failures that occur at loop execution time, even when the spec is well
 Usually caused by the eval overfitting to the program changes — the eval measures
 something the worker can game indefinitely.
 
+Note: `plateau_count` will *not* trigger here because the score keeps improving.
+The hard ceiling is `max_iterations`.
+
 **Mitigation:**
+- Always set `max_iterations` as a hard ceiling — it fires regardless of whether
+  the score is improving or stalling.
 - Use a held-out validation set that the eval also scores but the worker cannot see.
-- Set `plateau_count` to catch stalls (a variant: flag suspiciously long improvement
-  streaks for human review).
+- Flag suspiciously long improvement streaks (e.g., >10 consecutive improvements
+  without any near-miss iterations) for human review.
 - Periodic human review gates at checkpoints.
 
 ### Eval corruption
@@ -102,7 +109,9 @@ The loop records the stale score as a real measurement, contaminating the baseli
 
 **Mitigation:**
 - Validate JSON schema on every eval output before accepting the score.
-- Treat missing `combined_score`, schema violations, or empty output as `score=0`.
+- Treat a missing or malformed value for the configured `metric:` key (e.g.,
+  `combined_score`, `coverage_percent`) as a crash — not a valid measurement.
+- Treat empty output or non-zero exit code as a crash.
 - Log eval stderr separately so silent failures surface in the audit trail.
 
 ### Worker collision
@@ -111,12 +120,12 @@ The loop records the stale score as a real measurement, contaminating the baseli
 the same file. Neither worker knows about the other's changes. Whichever commits last
 overwrites the first, and the baseline state becomes incoherent.
 
-**Status:** This is a known open issue ([#1](https://github.com/witt3rd/hermes-cyclus/issues/1)).
-File isolation strategy is not yet resolved.
+**Status:** Design decision made (see [#1](https://github.com/witt3rd/hermes-cyclus/issues/1)):
+per-worker staging directories with optional git worktrees. Implementation tracked in Arc 2.
 
 **Mitigation until resolved:** Run at `level: L1` (no commits). No file isolation
 problem exists at L1 because workers propose but do not write. Promote to L2/L3
-only after the isolation strategy in issue #1 is implemented.
+only after the isolation strategy is implemented.
 
 ### Baseline drift
 
@@ -150,13 +159,13 @@ that assumption silently.
 
 - **loop-spec (Cyclus loop specification format):**
   <https://github.com/witt3rd/loop-spec>
-  Defines `max_iterations`, `plateau_count`, `level`, and other spec fields
+  Defines `max_iterations`, `plateau_count`, `level`, `metric`, and other spec fields
   referenced in this document.
 
-- **Issue #1 — Worker isolation strategy:**
+- **Issue #1 — Worker isolation strategy (decided):**
   <https://github.com/witt3rd/hermes-cyclus/issues/1>
-  Tracks the file-isolation design gap referenced in the Worker Collision section.
+  Tracks the file-isolation design decision referenced in the Worker Collision section.
 
-- **Issue #2 — Loop budget / `budget_exhausted` queue variant:**
-  <https://github.com/witt3rd/hermes-cyclus/issues/2>
+- **loop-spec #4 — Loop budget (`budget_tokens`):**
+  <https://github.com/witt3rd/loop-spec/issues/4>
   Tracks the budget enforcement mechanism referenced in Anti-Pattern #6.
