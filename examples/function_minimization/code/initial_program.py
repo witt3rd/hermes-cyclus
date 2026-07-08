@@ -1,12 +1,13 @@
 # EVOLVE-BLOCK-START
 """Function minimization example for OpenEvolve"""
 import numpy as np
-from scipy.optimize import differential_evolution
+from scipy.optimize import differential_evolution, minimize
 
 
 def search_algorithm(iterations=1000, bounds=(-5, 5)):
     """
-    Uses differential evolution for reliable global optimization.
+    Uses multiple differential evolution runs + L-BFGS-B polish for reliable
+    global optimization.
 
     Args:
         iterations: Number of iterations to run
@@ -17,20 +18,31 @@ def search_algorithm(iterations=1000, bounds=(-5, 5)):
     """
     search_bounds = [(bounds[0], bounds[1]), (bounds[0], bounds[1])]
 
-    result = differential_evolution(
-        lambda xy: evaluate_function(xy[0], xy[1]),
-        bounds=search_bounds,
-        maxiter=300,
-        tol=1e-9,
+    def obj(xy):
+        return evaluate_function(xy[0], xy[1])
 
-        popsize=15,
-        mutation=(0.5, 1.5),
-        recombination=0.7,
-        polish=True,
-    )
+    best_result = None
+    best_val = np.inf
 
-    best_x, best_y = result.x
-    best_value = result.fun
+    # Run multiple times and keep the best to ensure global minimum is found
+    for _ in range(3):
+        result = differential_evolution(
+            obj,
+            bounds=search_bounds,
+            maxiter=400,
+            tol=1e-10,
+            popsize=20,
+            mutation=(0.5, 1.5),
+            recombination=0.7,
+            polish=True,
+            strategy='best1bin',
+        )
+        if result.fun < best_val:
+            best_val = result.fun
+            best_result = result
+
+    best_x, best_y = best_result.x
+    best_value = best_result.fun
 
     return best_x, best_y, best_value
 
