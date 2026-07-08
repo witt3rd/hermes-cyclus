@@ -208,7 +208,7 @@ a backend swap is a config change, not a skill rewrite.
 |---------|------|-----------|
 | **File-based** | Always; zero config; NFS-safe | Atomic `os.rename()` across `pending/` → `active/` → `done/`. No database, no WAL. Works on Azure Files, NFS, any filesystem. |
 | **Kanban** | Hermes v0.18.0+ | Native Hermes durable board. `kanban_create/next/comment/complete` implement the four operations. HITL gates via `kanban_block`. |
-| **Saturate** | When configured | Distributed fleet. SQLite queue (file-based, NFS-safe) for Arc 1; PostgreSQL `SELECT FOR UPDATE SKIP LOCKED` for Arc 2+ concurrent fleet workers. Implements the full four-operation interface. |
+| **Saturate** | When configured | Distributed fleet. PostgreSQL `SELECT FOR UPDATE SKIP LOCKED` for concurrent workers. SQLite fallback for single-node. Implements the full four-operation interface. |
 
 **Why not SQLite for Tier 1?** WAL mode corrupts on NFS — the exact reason
 Hermes users on Azure Files disable Kanban. Atomic file renames are NFS-safe
@@ -237,9 +237,8 @@ on behalf of the worker, not by the worker itself.
 **The judge gap.** For `MetricOptimizationKind`, Saturate's `correctness` field
 is a shell command (exit 0 = pass). For Kanban `goal_mode`, acceptance criteria
 can be a reasoning judgment evaluated by an auxiliary judge after each turn. These
-are not equivalent. Saturate Arc 2 will need a judge executor step — either a
-Hermes invocation or a structured LLM call — to reach full parity with Kanban
-goal-mode for tasks where "done" requires semantic evaluation, not just a test exit code.
+are not equivalent. Saturate's judge executor step — a Hermes invocation or structured LLM call —
+closes this gap for tasks where "done" requires semantic evaluation, not just a test exit code.
 
 ---
 
@@ -280,28 +279,22 @@ Cyclus plugin repo — it is the user's project state.
 ## The Forward Arc
 
 ```
-loop-spec v0.1   Schema + Python reference implementation (shipped)
-                 executor, output_dir, evaluate_extract, correctness, plan_path
+loop-spec        Open standard schema — executor, output_dir, repo (git URL),
+                 evaluate_extract, correctness, plan_path, terminal conditions.
+                 Neither Cyclus nor Saturate owns it. Changes land here first.
 
-loop-spec v0.2   repo: git URL field — machine-agnostic target declaration (shipped)
-                 Absolute paths rejected by validator
+Cyclus           Deliberation layer — validates intent into typed loop specs,
+                 manages the queue interface, drives skills against any backend.
+                 cyclus-measure, cyclus-autoresearch, cyclus-ralplan, cyclus-ralph,
+                 cyclus-deep-research, cyclus-deep-interview, cyclus-loop-design.
 
-Cyclus v18.0.0   File-based queue, typed specs, load_spec() planning gate (shipped)
-                 Depends on loop-spec-py via git URL
-
-Cyclus v18.x     Arc 1 — cyclus_measure (MetricOptimizationKind eval primitive)
-                 Arc 2 — cyclus-autoresearch (first MetricOptimizationKind skill)
-                 Arc 3 — cyclus-loop-design (deliberation → typed spec)
-
-Saturate Arc 1   SQLite queue, runner/executor/scheduler primitives (shipped)
-                 repo field: clones git URL into isolated worktree per task
-                 loop-spec conformant: load_spec(), ExecutorSpec, TerminalConditions
-
-Saturate Arc 2   PostgreSQL SELECT FOR UPDATE SKIP LOCKED — concurrent fleet workers
-                 Judge executor step — semantic acceptance criteria beyond exit codes
+Saturate         Execution fabric — distributed loop execution over PostgreSQL.
+                 Serial and swarm topologies. BatchKind for parallel hypothesis fans.
+                 Judge executor for semantic acceptance criteria.
+                 repo field: isolates hypothesis commits to a cloned worktree.
 
 Continuum        Cognitive presence — surveys the Saturate fleet,
-                 identifies what to spawn next, directs long-horizon work
+                 identifies what to spawn next, directs long-horizon work.
 ```
 
 ---
