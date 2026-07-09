@@ -12,5 +12,8 @@ evaluate: |
   cd examples/circle_packing && \
     pip install -q numpy scipy matplotlib && \
     python3 code/evaluator.py
+executor:
+  type: hermes
+  profile: forge
 target_files:
   - examples/circle_packing/code/initial_program.py
