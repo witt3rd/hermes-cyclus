@@ -17,6 +17,9 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
 ]
+saturate = [
+    "saturate",
+]
 
 [project.entry-points."hermes_agent.plugins"]
 cyclus = "cyclus:register"
@@ -40,6 +43,7 @@ packages = ["."]
 
 [tool.uv.sources]
 loop-spec-py = { git = "https://github.com/witt3rd/loop-spec", subdirectory = "python" }
+saturate = { path = "../saturate" }
 
 [dependency-groups]
 dev = [

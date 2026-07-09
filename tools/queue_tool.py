@@ -3,7 +3,7 @@ cyclus_queue tool — backend-agnostic eight-operation interface.
 
 Backend detection (in priority order):
   1. Kanban  — HERMES_KANBAN_TASK env var set; kanban_* toolset active
-  2. Saturate — SATURATE_TASK env var set (future)
+  2. Saturate — SATURATE_TASK env var set; SATURATE_QUEUE_DIR locates the queue
   3. File    — default; atomic directory ops in .cyclus/queue/
 
 Skills call cyclus_queue and never touch backend APIs directly.
@@ -55,6 +55,114 @@ def _active_backend() -> str:
     if os.environ.get("SATURATE_TASK"):
         return "saturate"
     return "file"
+
+
+# ---------------------------------------------------------------------------
+# Saturate backend
+# ---------------------------------------------------------------------------
+
+def _get_saturate_queue():
+    """Return the active Saturate Queue instance, using SATURATE_QUEUE_DIR."""
+    try:
+        from saturate.queue import Queue as SaturateQueue
+        from saturate.queue_sqlite import SqliteQueue
+    except ImportError:
+        raise RuntimeError(
+            "Saturate backend requested (SATURATE_TASK is set) but the 'saturate' "
+            "package is not installed. Install with: uv add 'hermes-cyclus[saturate]'"
+        )
+    queue_dir = os.environ.get("SATURATE_QUEUE_DIR")
+    if queue_dir:
+        # Prefer SQLite queue when available (concurrent-safe)
+        db_path = os.path.join(queue_dir, "saturate.db")
+        if os.path.exists(db_path) or not os.path.exists(os.path.join(queue_dir, "queue")):
+            return SqliteQueue(base_dir=queue_dir)
+        return SaturateQueue(base_dir=queue_dir)
+    return SaturateQueue()  # default ~/.saturate
+
+
+def _saturate_action(action: str, args: dict) -> str:
+    """Route cyclus_queue actions to the Saturate backend."""
+    task_id = os.environ.get("SATURATE_TASK", "")
+    mode = args.get("mode", "")
+    instance_id = args.get("instance_id", "")
+
+    try:
+        q = _get_saturate_queue()
+    except RuntimeError as e:
+        return json.dumps({"error": str(e)})
+
+    match action:
+        case "status":
+            task = q.get(task_id) if task_id else None
+            if task is None:
+                return json.dumps({"found": False})
+            return json.dumps({
+                "found": True,
+                "task_id": task_id,
+                "status": task.get("status", "unknown"),
+                "kind": task.get("kind"),
+                "instance_id": instance_id,
+            })
+
+        case "write_state":
+            state = args.get("state")
+            err = _validate_state(state)
+            if err:
+                return json.dumps({"error": err})
+            assert isinstance(state, dict)
+            q.write_state(task_id, state)
+            return json.dumps({"ok": True})
+
+        case "complete":
+            terminal = args.get("terminal_state")
+            err = _validate_terminal(terminal)
+            if err:
+                return json.dumps({"error": err})
+            assert isinstance(terminal, str)
+            output = args.get("output") or {}
+            output["terminal_state"] = terminal
+            q.complete(task_id, output)
+            return json.dumps({"ok": True})
+
+        case "post":
+            # In Saturate mode, the task was already posted by the dispatcher.
+            # post() is a no-op — we're already inside the task.
+            return json.dumps({"task_id": task_id, "note": "saturate: task already exists"})
+
+        case "claim":
+            # Already claimed by the Saturate scheduler. Heartbeat via write_state.
+            return json.dumps({
+                "status": "claimed",
+                "item": {"task_id": task_id, "mode": mode, "instance_id": instance_id},
+            })
+
+        case "release":
+            # In Saturate mode, release means the worker is done — scheduler reclaims.
+            # Write an empty heartbeat to signal we're still alive then exit cleanly.
+            return json.dumps({"ok": True, "note": "saturate: scheduler reclaims on exit"})
+
+        case "cancel":
+            reason = args.get("reason", "user request")
+            if hasattr(q, "cancel"):
+                q.cancel(task_id, reason=reason)
+            else:
+                # File-based queue has no cancel — mark complete with cancelled state
+                q.complete(task_id, {"terminal_state": "Cancelled", "reason": reason})
+            return json.dumps({"ok": True})
+
+        case "dispatch":
+            # Saturate dispatches automatically via its scheduler — no-op here.
+            return json.dumps({
+                "dispatched": True,
+                "task_id": task_id,
+                "mode": mode,
+                "instance_id": instance_id,
+                "note": "saturate: scheduler dispatches automatically",
+            })
+
+        case _:
+            return json.dumps({"error": f"Saturate backend: unsupported action {action!r}"})
 
 
 # ---------------------------------------------------------------------------
@@ -409,7 +517,7 @@ def cyclus_queue_handler(args: dict, **kwargs) -> str:
             return _kanban_action(action, args, kanban_ctx)
 
         elif backend == "saturate":
-            return json.dumps({"error": "Saturate backend not yet implemented"})
+            return _saturate_action(action, args)
 
         else:
             return _file_action(action, args)
