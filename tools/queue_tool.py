@@ -98,8 +98,8 @@ def _active_backend() -> str:
 def _get_saturate_queue():
     """Return the active Saturate Queue instance, using SATURATE_QUEUE_DIR.
 
-    Queue selection:
-      - If SATURATE_QUEUE_DIR/saturate.db exists AND SqliteQueue is available
+    Queue selection (SqliteQueue stores its DB as queue.db, not saturate.db):
+      - If SATURATE_QUEUE_DIR/queue.db exists AND SqliteQueue is available
         → SqliteQueue (concurrent-safe)
       - Otherwise → file-based Queue
     This applies both when SATURATE_QUEUE_DIR is set and for the default path.
