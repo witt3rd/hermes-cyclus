@@ -1,11 +1,11 @@
 """Tests for cyclus_queue Saturate backend routing.
 
 Covers:
-  - All eight actions routed correctly when SATURATE_TASK is set
+  - All eight actions routed correctly when SATURATE_TASK_ID is set
   - Shared validation (state/terminal_state) applied consistently
   - Error returned when Saturate package unavailable
   - Queue selection: file-based vs SQLite based on saturate.db presence
-  - Fail-fast on ALL actions when SATURATE_TASK is missing (Saturate is task-scoped)
+  - Fail-fast on ALL actions when SATURATE_TASK_ID is missing (Saturate is task-scoped)
 """
 from __future__ import annotations
 
@@ -25,9 +25,9 @@ from cyclus.tools.queue_tool import cyclus_queue_handler
 
 @pytest.fixture()
 def saturate_env(tmp_path, monkeypatch):
-    """Saturate backend — SATURATE_TASK set, queue in tmp_path."""
+    """Saturate backend — SATURATE_TASK_ID set, queue in tmp_path."""
     task_id = "test-task-abc123"
-    monkeypatch.setenv("SATURATE_TASK", task_id)
+    monkeypatch.setenv("SATURATE_TASK_ID", task_id)
     monkeypatch.setenv("SATURATE_QUEUE_DIR", str(tmp_path))
     monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
     return {"task_id": task_id, "queue_dir": tmp_path}
@@ -214,9 +214,9 @@ def test_saturate_uses_file_queue_when_no_db(saturate_env):
 
 
 def test_saturate_mutating_without_task_id_returns_error(monkeypatch):
-    """All Saturate actions fail fast when SATURATE_TASK is missing."""
+    """All Saturate actions fail fast when SATURATE_TASK_ID is missing."""
     monkeypatch.setenv("CYCLUS_BACKEND", "saturate")
-    monkeypatch.delenv("SATURATE_TASK", raising=False)
+    monkeypatch.delenv("SATURATE_TASK_ID", raising=False)
     monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
 
     for action in ("write_state", "complete", "cancel", "claim", "dispatch", "post", "status"):
@@ -224,5 +224,5 @@ def test_saturate_mutating_without_task_id_returns_error(monkeypatch):
             {"action": action, "mode": "loop", "instance_id": "x",
              "state": {"x": 1}, "terminal_state": "Done"}
         ))
-        assert "error" in result, f"Expected error for {action} without SATURATE_TASK"
-        assert "SATURATE_TASK" in result["error"]
+        assert "error" in result, f"Expected error for {action} without SATURATE_TASK_ID"
+        assert "SATURATE_TASK_ID" in result["error"]
