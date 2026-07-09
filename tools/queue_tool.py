@@ -111,7 +111,8 @@ def _get_saturate_queue():
         )
     import pathlib
     base = pathlib.Path(os.environ.get("SATURATE_QUEUE_DIR") or (pathlib.Path.home() / ".saturate"))
-    db_path = base / "saturate.db"
+    # SqliteQueue stores the DB as queue.db (not saturate.db)
+    db_path = base / "queue.db"
     if db_path.exists() and SqliteQueue is not None:
         return SqliteQueue(base_dir=str(base))
     return SaturateQueue(base_dir=str(base))
