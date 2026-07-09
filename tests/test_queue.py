@@ -377,16 +377,21 @@ def test_file_queue_claim_is_atomic(queue_env):
     post(mode="loop", instance_id="atomic-test", kind="TaskExecutionKind", name="Atomic")
 
     results = []
+    errors = []
 
     def do_claim():
-        r = claim(mode="loop", instance_id="atomic-test")
-        results.append(r.status)
+        try:
+            r = claim(mode="loop", instance_id="atomic-test")
+            results.append(r.status)
+        except Exception as e:
+            errors.append(str(e))
 
     t1 = threading.Thread(target=do_claim)
     t2 = threading.Thread(target=do_claim)
     t1.start(); t2.start()
     t1.join(); t2.join()
 
+    assert not errors, f"Thread raised exception: {errors}"
     assert len(results) == 2
     assert results.count("claimed") == 1
     # The loser sees the item already active (fresh heartbeat) → "running"
