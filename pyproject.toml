@@ -43,7 +43,7 @@ packages = ["."]
 
 [tool.uv.sources]
 loop-spec-py = { git = "https://github.com/witt3rd/loop-spec", subdirectory = "python" }
-saturate = { path = "../saturate" }
+saturate = { git = "https://github.com/witt3rd/saturate" }
 
 [dependency-groups]
 dev = [

@@ -4,19 +4,17 @@ Covers:
   - All eight actions routed correctly when SATURATE_TASK is set
   - Shared validation (state/terminal_state) applied consistently
   - Error returned when Saturate package unavailable
-  - Queue selection: file-based vs SQLite based on SATURATE_QUEUE_DIR
-  - No silent fallback to file backend when SATURATE_TASK is set
+  - Queue selection: file-based vs SQLite based on saturate.db presence
+  - Fail-fast on mutating actions when SATURATE_TASK is missing
 """
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-import cyclus.cyclus_config as cyclus_config_module
 from cyclus.tools.queue_tool import cyclus_queue_handler
 
 
@@ -175,25 +173,52 @@ def test_saturate_import_error_returns_error(saturate_env, monkeypatch):
 
 
 def test_saturate_uses_sqlite_when_db_exists(saturate_env, tmp_path):
-    """When SATURATE_QUEUE_DIR has a saturate.db, SqliteQueue is used."""
+    """When saturate.db exists in SATURATE_QUEUE_DIR, SqliteQueue is selected."""
     db_path = tmp_path / "saturate.db"
-    db_path.touch()  # create stub db file
+    db_path.touch()
 
-    with patch("cyclus.tools.queue_tool._get_saturate_queue") as mock_factory:
-        mock_q = MagicMock()
-        mock_q.get.return_value = {"status": "running", "kind": "MetricOptimizationKind"}
-        mock_factory.return_value = mock_q
+    mock_instance = MagicMock()
+    mock_instance.get.return_value = {"status": "running", "kind": "MetricOptimizationKind"}
+    MockSql = MagicMock(return_value=mock_instance)
+    MockFile = MagicMock()
+
+    with patch("cyclus.tools.queue_tool.SqliteQueue", MockSql), \
+         patch("cyclus.tools.queue_tool.SaturateQueue", MockFile):
         result = json.loads(cyclus_queue_handler(
             {"action": "status", "mode": "loop", "instance_id": "x"}
         ))
     assert result["found"] is True
+    MockSql.assert_called_once_with(base_dir=str(tmp_path))
+    MockFile.assert_not_called()
 
 
-def test_saturate_env_without_kanban(saturate_env, mock_saturate_queue):
-    """SATURATE_TASK set, no HERMES_KANBAN_TASK — routes to Saturate, not file."""
-    # Verify file backend is NOT used
-    with patch("cyclus.tools.queue_tool._file_action") as mock_file:
-        cyclus_queue_handler(
+def test_saturate_uses_file_queue_when_no_db(saturate_env, tmp_path):
+    """When no saturate.db exists, file-based Queue is selected."""
+    mock_instance = MagicMock()
+    mock_instance.get.return_value = {"status": "running", "kind": "MetricOptimizationKind"}
+    MockFile = MagicMock(return_value=mock_instance)
+    MockSql = MagicMock()
+
+    with patch("cyclus.tools.queue_tool.SaturateQueue", MockFile), \
+         patch("cyclus.tools.queue_tool.SqliteQueue", MockSql):
+        result = json.loads(cyclus_queue_handler(
             {"action": "status", "mode": "loop", "instance_id": "x"}
-        )
-        mock_file.assert_not_called()
+        ))
+    assert result["found"] is True
+    MockFile.assert_called_once_with(base_dir=str(tmp_path))
+    MockSql.assert_not_called()
+
+
+def test_saturate_mutating_without_task_id_returns_error(monkeypatch):
+    """Mutating actions fail fast when SATURATE_TASK is missing."""
+    monkeypatch.setenv("CYCLUS_BACKEND", "saturate")
+    monkeypatch.delenv("SATURATE_TASK", raising=False)
+    monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
+
+    for action in ("write_state", "complete", "cancel"):
+        result = json.loads(cyclus_queue_handler(
+            {"action": action, "mode": "loop", "instance_id": "x",
+             "state": {"x": 1}, "terminal_state": "Done"}
+        ))
+        assert "error" in result, f"Expected error for {action} without SATURATE_TASK"
+        assert "SATURATE_TASK" in result["error"]

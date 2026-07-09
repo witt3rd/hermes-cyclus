@@ -2,9 +2,10 @@
 cyclus_queue tool — backend-agnostic eight-operation interface.
 
 Backend detection (in priority order):
-  1. Kanban  — HERMES_KANBAN_TASK env var set; kanban_* toolset active
+  1. Kanban   — HERMES_KANBAN_TASK env var set; kanban_* toolset active
   2. Saturate — SATURATE_TASK env var set; SATURATE_QUEUE_DIR locates the queue
-  3. File    — default; atomic directory ops in .cyclus/queue/
+  3. Explicit — CYCLUS_BACKEND=kanban|saturate|file (user/skill --backend choice)
+  4. File     — default; atomic directory ops in .cyclus/queue/
 
 Skills call cyclus_queue and never touch backend APIs directly.
 """
@@ -15,6 +16,14 @@ import os
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+# Module-level optional imports — None if saturate not installed
+try:
+    from saturate.queue import Queue as SaturateQueue
+    from saturate.queue_sqlite import SqliteQueue
+except ImportError:
+    SaturateQueue = None  # type: ignore[assignment,misc]
+    SqliteQueue = None  # type: ignore[assignment,misc]
 
 # Max chars of state payload posted to a Kanban comment to avoid leaks / size limits
 _KANBAN_STATE_COMMENT_MAX = 1000
@@ -78,23 +87,24 @@ def _active_backend() -> str:
 # ---------------------------------------------------------------------------
 
 def _get_saturate_queue():
-    """Return the active Saturate Queue instance, using SATURATE_QUEUE_DIR."""
-    try:
-        from saturate.queue import Queue as SaturateQueue
-        from saturate.queue_sqlite import SqliteQueue
-    except ImportError:
+    """Return the active Saturate Queue instance, using SATURATE_QUEUE_DIR.
+
+    Queue selection:
+      - If SATURATE_QUEUE_DIR/saturate.db exists → SqliteQueue (concurrent-safe)
+      - Otherwise → file-based Queue
+    This applies both when SATURATE_QUEUE_DIR is set and for the default path.
+    """
+    if SaturateQueue is None or SqliteQueue is None:
         raise RuntimeError(
             "Saturate backend requested (SATURATE_TASK is set) but the 'saturate' "
             "package is not installed. Install with: uv add 'hermes-cyclus[saturate]'"
         )
-    queue_dir = os.environ.get("SATURATE_QUEUE_DIR")
-    if queue_dir:
-        # Prefer SQLite queue when available (concurrent-safe)
-        db_path = os.path.join(queue_dir, "saturate.db")
-        if os.path.exists(db_path) or not os.path.exists(os.path.join(queue_dir, "queue")):
-            return SqliteQueue(base_dir=queue_dir)
-        return SaturateQueue(base_dir=queue_dir)
-    return SaturateQueue()  # default ~/.saturate
+    import pathlib
+    base = pathlib.Path(os.environ.get("SATURATE_QUEUE_DIR") or (pathlib.Path.home() / ".saturate"))
+    db_path = base / "saturate.db"
+    if db_path.exists():
+        return SqliteQueue(base_dir=str(base))
+    return SaturateQueue(base_dir=str(base))
 
 
 def _saturate_action(action: str, args: dict) -> str:
@@ -102,6 +112,16 @@ def _saturate_action(action: str, args: dict) -> str:
     task_id = os.environ.get("SATURATE_TASK", "")
     mode = args.get("mode", "")
     instance_id = args.get("instance_id", "")
+
+    # Mutating actions require a task_id — fail fast if missing
+    _mutating = {"write_state", "complete", "cancel"}
+    if not task_id and action in _mutating:
+        return json.dumps({
+            "error": (
+                f"SATURATE_TASK is not set but action={action!r} requires a task_id. "
+                "Set SATURATE_TASK to the active task ID before calling mutating operations."
+            )
+        })
 
     try:
         q = _get_saturate_queue()
@@ -154,9 +174,10 @@ def _saturate_action(action: str, args: dict) -> str:
             })
 
         case "release":
-            # In Saturate mode, release means the worker is done — scheduler reclaims.
-            # Write an empty heartbeat to signal we're still alive then exit cleanly.
-            return json.dumps({"ok": True, "note": "saturate: scheduler reclaims on exit"})
+            # In Saturate mode, the scheduler reclaims the task when the worker
+            # process exits. release() is a no-op here — the scheduler detects
+            # completion via heartbeat expiry or explicit complete().
+            return json.dumps({"ok": True, "note": "saturate: scheduler reclaims on worker exit"})
 
         case "cancel":
             reason = args.get("reason", "user request")
