@@ -17,3 +17,6 @@ evaluate: |
   pct = data['totals']['percent_covered']
   print(json.dumps({'coverage_percent': round(pct, 2)}))
   "
+executor:
+  type: hermes
+  profile: forge

@@ -3,12 +3,14 @@ cyclus_queue tool — backend-agnostic eight-operation interface.
 
 Backend detection (in priority order):
   1. Kanban   — HERMES_KANBAN_TASK env var set; kanban_* toolset active
-  2. Saturate — SATURATE_TASK env var set; SATURATE_QUEUE_DIR locates the queue
+  2. Saturate — SATURATE_TASK_ID env var set; SATURATE_QUEUE_DIR locates the queue
   3. Explicit — CYCLUS_BACKEND=kanban|saturate|file|filesystem (user/skill --backend choice)
                ('filesystem' is accepted as an alias for 'file')
   4. File     — default; atomic directory ops in .cyclus/queue/
 
-All Saturate actions require SATURATE_TASK to be set (Saturate is task-scoped).
+All Saturate actions require SATURATE_TASK_ID to be set (Saturate is task-scoped).
+SATURATE_TASK_ID is injected by the Saturate scheduler and by HermesExecutor into
+the hermes worker subprocess environment.
 Skills call cyclus_queue and never touch backend APIs directly.
 """
 
@@ -69,7 +71,7 @@ def _active_backend() -> str:
 
     Priority order:
       1. HERMES_KANBAN_TASK — injected by Kanban dispatcher (identity signal, not overridable)
-      2. SATURATE_TASK      — injected by Saturate scheduler (identity signal, not overridable)
+      2. SATURATE_TASK_ID   — injected by Saturate scheduler / HermesExecutor (identity signal)
       3. CYCLUS_BACKEND     — explicit user/skill choice (set via --backend modifier)
       4. cyclus.backend in profile config (future)
       5. file               — zero-config fallback
@@ -80,7 +82,8 @@ def _active_backend() -> str:
     """
     if os.environ.get("HERMES_KANBAN_TASK"):
         return "kanban"
-    if os.environ.get("SATURATE_TASK"):
+    # Prefer SATURATE_TASK_ID (canonical); fall back to SATURATE_TASK for compatibility
+    if os.environ.get("SATURATE_TASK_ID") or os.environ.get("SATURATE_TASK"):
         return "saturate"
     backend = os.environ.get("CYCLUS_BACKEND", "").lower().strip()
     if backend in ("kanban", "saturate", "file", "filesystem"):
@@ -116,21 +119,22 @@ def _get_saturate_queue():
 
 def _saturate_action(action: str, args: dict) -> str:
     """Route cyclus_queue actions to the Saturate backend."""
-    task_id = os.environ.get("SATURATE_TASK", "")
+    # Prefer SATURATE_TASK_ID (canonical); fall back to SATURATE_TASK for compatibility
+    task_id = os.environ.get("SATURATE_TASK_ID") or os.environ.get("SATURATE_TASK", "")
     mode = args.get("mode", "")
     instance_id = args.get("instance_id", "")
 
-    # All Saturate actions are task-scoped — require SATURATE_TASK for all
+    # All Saturate actions are task-scoped — require SATURATE_TASK_ID (or SATURATE_TASK) for all
     if not task_id:
         active_signals = [
-            s for s in ("HERMES_KANBAN_TASK", "SATURATE_TASK", "CYCLUS_BACKEND")
+            s for s in ("HERMES_KANBAN_TASK", "SATURATE_TASK_ID", "SATURATE_TASK", "CYCLUS_BACKEND")
             if os.environ.get(s)
         ]
         return json.dumps({
             "error": (
-                f"action={action!r} requires a task_id but SATURATE_TASK is not set. "
+                f"action={action!r} requires a task_id but SATURATE_TASK_ID is not set. "
                 f"Active backend signals: {active_signals or ['none']}. "
-                "Set SATURATE_TASK to the active Saturate task ID."
+                "Set SATURATE_TASK_ID to the active Saturate task ID."
             )
         })
 
@@ -458,7 +462,7 @@ CYCLUS_QUEUE_SCHEMA = {
         "Cyclus work queue — backend-agnostic interface. "
         "Backend is auto-detected in priority order: "
         "(1) HERMES_KANBAN_TASK set → Kanban; "
-        "(2) SATURATE_TASK set → Saturate; "
+        "(2) SATURATE_TASK_ID set → Saturate; "
         "(3) CYCLUS_BACKEND env var → explicit choice (set via --backend kanban|saturate|file, "
         "or 'filesystem' as an alias for 'file'); "
         "(4) file-based queue (default, zero-config). "

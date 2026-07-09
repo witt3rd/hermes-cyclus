@@ -133,7 +133,7 @@ environment variables and routes accordingly.
 | Priority | Signal | Set by | Overridable? |
 |----------|--------|--------|-------------|
 | 1 | `HERMES_KANBAN_TASK` | Kanban dispatcher | No — identity signal |
-| 2 | `SATURATE_TASK` | Saturate scheduler | No — identity signal |
+| 2 | `SATURATE_TASK_ID` (or `SATURATE_TASK`) | Saturate scheduler | No — identity signal |
 | 3 | `CYCLUS_BACKEND` | User / skill modifier | Yes |
 | 4 | *(future: profile config)* | — | Yes |
 | 5 | `file` | default | — |
@@ -150,7 +150,7 @@ CYCLUS_BACKEND=kanban cyclus-loop ...
 CYCLUS_BACKEND=saturate cyclus-loop ...
 ```
 
-The key distinction: `HERMES_KANBAN_TASK` and `SATURATE_TASK` are *identity signals*
+The key distinction: `HERMES_KANBAN_TASK` and `SATURATE_TASK_ID` (alias: `SATURATE_TASK`) are *identity signals*
 injected by the dispatcher — they mean "you were spawned by me" and are not user choices.
 `CYCLUS_BACKEND` is the *user preference signal* that sits below both.
 
@@ -337,7 +337,7 @@ cyclus_queue(action="write_state", mode="loop", instance_id="my-plan",
 
 `queue_tool.py` detects the active backend and routes:
 - `HERMES_KANBAN_TASK` set → `kanban_heartbeat` + `kanban_comment`
-- `SATURATE_TASK` set → Saturate API *(future)*
+- `SATURATE_TASK_ID` set → Saturate API *(future)*
 - default → file-based queue in `.cyclus/`
 
 ---
