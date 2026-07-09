@@ -2,10 +2,13 @@
 cyclus_queue tool — backend-agnostic eight-operation interface.
 
 Backend detection (in priority order):
-  1. Kanban  — HERMES_KANBAN_TASK env var set; kanban_* toolset active
-  2. Saturate — SATURATE_TASK env var set (future)
-  3. File    — default; atomic directory ops in .cyclus/queue/
+  1. Kanban   — HERMES_KANBAN_TASK env var set; kanban_* toolset active
+  2. Saturate — SATURATE_TASK env var set; SATURATE_QUEUE_DIR locates the queue
+  3. Explicit — CYCLUS_BACKEND=kanban|saturate|file|filesystem (user/skill --backend choice)
+               ('filesystem' is accepted as an alias for 'file')
+  4. File     — default; atomic directory ops in .cyclus/queue/
 
+All Saturate actions require SATURATE_TASK to be set (Saturate is task-scoped).
 Skills call cyclus_queue and never touch backend APIs directly.
 """
 
@@ -15,6 +18,18 @@ import os
 from typing import Any
 
 log = logging.getLogger(__name__)
+
+# Module-level optional imports — independently guarded so SQLite unavailability
+# doesn't prevent use of the file-based Queue.
+try:
+    from saturate.queue import Queue as SaturateQueue
+except ImportError:
+    SaturateQueue = None  # type: ignore[assignment,misc]
+
+try:
+    from saturate.queue_sqlite import SqliteQueue
+except ImportError:
+    SqliteQueue = None  # type: ignore[assignment,misc]
 
 # Max chars of state payload posted to a Kanban comment to avoid leaks / size limits
 _KANBAN_STATE_COMMENT_MAX = 1000
@@ -50,11 +65,154 @@ def _redact_state(state: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def _active_backend() -> str:
+    """Detect which backend is active.
+
+    Priority order:
+      1. HERMES_KANBAN_TASK — injected by Kanban dispatcher (identity signal, not overridable)
+      2. SATURATE_TASK      — injected by Saturate scheduler (identity signal, not overridable)
+      3. CYCLUS_BACKEND     — explicit user/skill choice (set via --backend modifier)
+      4. cyclus.backend in profile config (future)
+      5. file               — zero-config fallback
+
+    The --backend kanban|saturate|file skill modifier sets CYCLUS_BACKEND for
+    the duration of a skill invocation. This is distinct from the dispatcher
+    identity signals (1, 2) which are injected by infrastructure, not chosen by users.
+    """
     if os.environ.get("HERMES_KANBAN_TASK"):
         return "kanban"
     if os.environ.get("SATURATE_TASK"):
         return "saturate"
+    backend = os.environ.get("CYCLUS_BACKEND", "").lower().strip()
+    if backend in ("kanban", "saturate", "file", "filesystem"):
+        return "file" if backend == "filesystem" else backend
     return "file"
+
+
+# ---------------------------------------------------------------------------
+# Saturate backend
+# ---------------------------------------------------------------------------
+
+def _get_saturate_queue():
+    """Return the active Saturate Queue instance, using SATURATE_QUEUE_DIR.
+
+    Queue selection:
+      - If SATURATE_QUEUE_DIR/saturate.db exists AND SqliteQueue is available
+        → SqliteQueue (concurrent-safe)
+      - Otherwise → file-based Queue
+    This applies both when SATURATE_QUEUE_DIR is set and for the default path.
+    """
+    if SaturateQueue is None:
+        raise RuntimeError(
+            "Saturate backend requested but the 'saturate' package is not installed. "
+            "Install with: uv add 'hermes-cyclus[saturate]'"
+        )
+    import pathlib
+    base = pathlib.Path(os.environ.get("SATURATE_QUEUE_DIR") or (pathlib.Path.home() / ".saturate"))
+    db_path = base / "saturate.db"
+    if db_path.exists() and SqliteQueue is not None:
+        return SqliteQueue(base_dir=str(base))
+    return SaturateQueue(base_dir=str(base))
+
+
+def _saturate_action(action: str, args: dict) -> str:
+    """Route cyclus_queue actions to the Saturate backend."""
+    task_id = os.environ.get("SATURATE_TASK", "")
+    mode = args.get("mode", "")
+    instance_id = args.get("instance_id", "")
+
+    # All Saturate actions are task-scoped — require SATURATE_TASK for all
+    if not task_id:
+        active_signals = [
+            s for s in ("HERMES_KANBAN_TASK", "SATURATE_TASK", "CYCLUS_BACKEND")
+            if os.environ.get(s)
+        ]
+        return json.dumps({
+            "error": (
+                f"action={action!r} requires a task_id but SATURATE_TASK is not set. "
+                f"Active backend signals: {active_signals or ['none']}. "
+                "Set SATURATE_TASK to the active Saturate task ID."
+            )
+        })
+
+    try:
+        q = _get_saturate_queue()
+    except RuntimeError as e:
+        return json.dumps({"error": str(e)})
+
+    match action:
+        case "status":
+            task = q.get(task_id) if task_id else None
+            if task is None:
+                return json.dumps({"found": False})
+            return json.dumps({
+                "found": True,
+                "task_id": task_id,
+                "status": task.get("status", "unknown"),
+                "kind": task.get("kind"),
+                "instance_id": instance_id,
+            })
+
+        case "write_state":
+            state = args.get("state")
+            err = _validate_state(state)
+            if err:
+                return json.dumps({"error": err})
+            assert isinstance(state, dict)
+            q.write_state(task_id, state)
+            return json.dumps({"ok": True})
+
+        case "complete":
+            terminal = args.get("terminal_state")
+            err = _validate_terminal(terminal)
+            if err:
+                return json.dumps({"error": err})
+            assert isinstance(terminal, str)
+            # Copy to avoid mutating caller's args dict
+            output = dict(args.get("output") or {})
+            output["terminal_state"] = terminal
+            q.complete(task_id, output)
+            return json.dumps({"ok": True})
+
+        case "post":
+            # In Saturate mode, the task was already posted by the dispatcher.
+            # post() is a no-op — we're already inside the task.
+            return json.dumps({"task_id": task_id, "note": "saturate: task already exists"})
+
+        case "claim":
+            # Already claimed by the Saturate scheduler. Heartbeat via write_state.
+            return json.dumps({
+                "status": "claimed",
+                "item": {"task_id": task_id, "mode": mode, "instance_id": instance_id},
+            })
+
+        case "release":
+            # In Saturate mode, the scheduler reclaims the task when the worker
+            # process exits. release() is a no-op here — the scheduler detects
+            # completion via heartbeat expiry or explicit complete().
+            return json.dumps({"ok": True, "note": "saturate: scheduler reclaims on worker exit"})
+
+        case "cancel":
+            reason = args.get("reason", "user request")
+            if hasattr(q, "cancel"):
+                # SqliteQueue.cancel(task_id, reason) — both args required
+                q.cancel(task_id, reason=reason)
+            else:
+                # File-based Queue has no cancel — complete with Cancelled state
+                q.complete(task_id, {"terminal_state": "Cancelled", "reason": reason})
+            return json.dumps({"ok": True})
+
+        case "dispatch":
+            # Saturate dispatches automatically via its scheduler — no-op here.
+            return json.dumps({
+                "dispatched": True,
+                "task_id": task_id,
+                "mode": mode,
+                "instance_id": instance_id,
+                "note": "saturate: scheduler dispatches automatically",
+            })
+
+        case _:
+            return json.dumps({"error": f"Saturate backend: unsupported action {action!r}"})
 
 
 # ---------------------------------------------------------------------------
@@ -298,8 +456,12 @@ CYCLUS_QUEUE_SCHEMA = {
     "name": "cyclus_queue",
     "description": (
         "Cyclus work queue — backend-agnostic interface. "
-        "Routes to Kanban (HERMES_KANBAN_TASK), Saturate (SATURATE_TASK), "
-        "or file-based queue (default). "
+        "Backend is auto-detected in priority order: "
+        "(1) HERMES_KANBAN_TASK set → Kanban; "
+        "(2) SATURATE_TASK set → Saturate; "
+        "(3) CYCLUS_BACKEND env var → explicit choice (set via --backend kanban|saturate|file, "
+        "or 'filesystem' as an alias for 'file'); "
+        "(4) file-based queue (default, zero-config). "
         "Actions: post | claim | release | write_state | cancel | complete | status | dispatch."
     ),
     "parameters": {
@@ -409,7 +571,7 @@ def cyclus_queue_handler(args: dict, **kwargs) -> str:
             return _kanban_action(action, args, kanban_ctx)
 
         elif backend == "saturate":
-            return json.dumps({"error": "Saturate backend not yet implemented"})
+            return _saturate_action(action, args)
 
         else:
             return _file_action(action, args)

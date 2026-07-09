@@ -128,6 +128,32 @@ Swarm:   Dispatcher ──┬── Worker A (hypothesis α) ──┐
 and never touch backend APIs directly. `queue_tool.py` detects the active backend via
 environment variables and routes accordingly.
 
+**Backend detection — priority order:**
+
+| Priority | Signal | Set by | Overridable? |
+|----------|--------|--------|-------------|
+| 1 | `HERMES_KANBAN_TASK` | Kanban dispatcher | No — identity signal |
+| 2 | `SATURATE_TASK` | Saturate scheduler | No — identity signal |
+| 3 | `CYCLUS_BACKEND` | User / skill modifier | Yes |
+| 4 | *(future: profile config)* | — | Yes |
+| 5 | `file` | default | — |
+
+**The `--backend` skill modifier** sets `CYCLUS_BACKEND` for the duration of a skill
+invocation. This is how a user explicitly selects a backend when not being dispatched
+by infrastructure:
+
+```
+# Use Kanban backend for this loop run
+CYCLUS_BACKEND=kanban cyclus-loop ...
+
+# Use Saturate backend
+CYCLUS_BACKEND=saturate cyclus-loop ...
+```
+
+The key distinction: `HERMES_KANBAN_TASK` and `SATURATE_TASK` are *identity signals*
+injected by the dispatcher — they mean "you were spawned by me" and are not user choices.
+`CYCLUS_BACKEND` is the *user preference signal* that sits below both.
+
 ---
 
 ## The Dispatcher and the Worker
