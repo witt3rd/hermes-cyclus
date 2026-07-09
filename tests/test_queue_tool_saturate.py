@@ -5,7 +5,7 @@ Covers:
   - Shared validation (state/terminal_state) applied consistently
   - Error returned when Saturate package unavailable
   - Queue selection: file-based vs SQLite based on saturate.db presence
-  - Fail-fast on mutating actions when SATURATE_TASK is missing
+  - Fail-fast on ALL actions when SATURATE_TASK is missing (Saturate is task-scoped)
 """
 from __future__ import annotations
 

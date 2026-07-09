@@ -4,9 +4,11 @@ cyclus_queue tool — backend-agnostic eight-operation interface.
 Backend detection (in priority order):
   1. Kanban   — HERMES_KANBAN_TASK env var set; kanban_* toolset active
   2. Saturate — SATURATE_TASK env var set; SATURATE_QUEUE_DIR locates the queue
-  3. Explicit — CYCLUS_BACKEND=kanban|saturate|file (user/skill --backend choice)
+  3. Explicit — CYCLUS_BACKEND=kanban|saturate|file|filesystem (user/skill --backend choice)
+               ('filesystem' is accepted as an alias for 'file')
   4. File     — default; atomic directory ops in .cyclus/queue/
 
+All Saturate actions require SATURATE_TASK to be set (Saturate is task-scoped).
 Skills call cyclus_queue and never touch backend APIs directly.
 """
 
@@ -192,9 +194,10 @@ def _saturate_action(action: str, args: dict) -> str:
         case "cancel":
             reason = args.get("reason", "user request")
             if hasattr(q, "cancel"):
+                # SqliteQueue.cancel(task_id, reason) — both args required
                 q.cancel(task_id, reason=reason)
             else:
-                # File-based queue has no cancel — mark complete with cancelled state
+                # File-based Queue has no cancel — complete with Cancelled state
                 q.complete(task_id, {"terminal_state": "Cancelled", "reason": reason})
             return json.dumps({"ok": True})
 
@@ -456,7 +459,8 @@ CYCLUS_QUEUE_SCHEMA = {
         "Backend is auto-detected in priority order: "
         "(1) HERMES_KANBAN_TASK set → Kanban; "
         "(2) SATURATE_TASK set → Saturate; "
-        "(3) CYCLUS_BACKEND env var → explicit choice (set via --backend kanban|saturate|file); "
+        "(3) CYCLUS_BACKEND env var → explicit choice (set via --backend kanban|saturate|file, "
+        "or 'filesystem' as an alias for 'file'); "
         "(4) file-based queue (default, zero-config). "
         "Actions: post | claim | release | write_state | cancel | complete | status | dispatch."
     ),

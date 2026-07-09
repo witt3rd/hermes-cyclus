@@ -18,9 +18,10 @@ dev = [
     "pytest-asyncio>=0.23",
 ]
 saturate = [
-    # Direct URL — works with pip, poetry, and uv without index lookup.
+    # Pinned to a specific commit for reproducibility.
+    # Works with pip, poetry, and uv via direct URL (PEP 508).
     # Requires hatchling allow-direct-references = true (set above).
-    "saturate @ git+https://github.com/witt3rd/saturate",
+    "saturate @ git+https://github.com/witt3rd/saturate@2c2181f203ba35610d702db07db2796cebb81f06",
 ]
 
 [project.entry-points."hermes_agent.plugins"]
@@ -48,8 +49,8 @@ packages = ["."]
 
 [tool.uv.sources]
 loop-spec-py = { git = "https://github.com/witt3rd/loop-spec", subdirectory = "python" }
-# Note: the 'saturate' extra requires uv to resolve this git source.
-# pip/poetry users must install saturate separately from its git repo.
+# Local dev override — uv uses this path instead of the pinned git URL above.
+# Remove or adjust for your local setup; this is not used by pip/poetry.
 saturate = { git = "https://github.com/witt3rd/saturate" }
 
 [dependency-groups]
