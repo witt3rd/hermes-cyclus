@@ -173,9 +173,10 @@ def test_saturate_import_error_returns_error(saturate_env, monkeypatch):
 
 
 def test_saturate_uses_sqlite_when_db_exists(saturate_env):
-    """When saturate.db exists in SATURATE_QUEUE_DIR, SqliteQueue is selected."""
+    """When queue.db exists in SATURATE_QUEUE_DIR, SqliteQueue is selected."""
     queue_dir = Path(saturate_env["queue_dir"])
-    db_path = queue_dir / "saturate.db"
+    # SqliteQueue stores queue.db (not saturate.db)
+    db_path = queue_dir / "queue.db"
     db_path.touch()
 
     mock_instance = MagicMock()
@@ -194,9 +195,9 @@ def test_saturate_uses_sqlite_when_db_exists(saturate_env):
 
 
 def test_saturate_uses_file_queue_when_no_db(saturate_env):
-    """When no saturate.db exists, file-based Queue is selected."""
+    """When no queue.db exists, file-based Queue is selected."""
     queue_dir = Path(saturate_env["queue_dir"])
-    # No db_path created — queue dir exists but has no saturate.db
+    # No db_path created — queue dir exists but has no queue.db
 
     mock_instance = MagicMock()
     mock_instance.get.return_value = {"status": "running", "kind": "MetricOptimizationKind"}

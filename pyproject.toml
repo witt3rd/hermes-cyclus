@@ -21,7 +21,7 @@ saturate = [
     # Pinned to a specific commit for reproducibility.
     # Works with pip, poetry, and uv via direct URL (PEP 508).
     # Requires hatchling allow-direct-references = true (set above).
-    "saturate @ git+https://github.com/witt3rd/saturate@2c2181f203ba35610d702db07db2796cebb81f06",
+    "saturate @ git+https://github.com/witt3rd/saturate@e715157c56cbdeacd2c5f8d0a42931dc6eea0bcc",
 ]
 
 [project.entry-points."hermes_agent.plugins"]

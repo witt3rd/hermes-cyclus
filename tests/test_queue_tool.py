@@ -16,7 +16,16 @@ from cyclus.tools.queue_tool import cyclus_queue_handler
 
 @pytest.fixture()
 def queue_env(tmp_path, monkeypatch):
-    """Isolate queue I/O to tmp_path for each test."""
+    """Isolate queue I/O to tmp_path and force file backend for each test.
+
+    Clears all backend-selection env vars so _active_backend() returns 'file'
+    unconditionally, even when tests run inside a Kanban worker or when
+    CYCLUS_BACKEND is set in the environment.
+    """
+    monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
+    monkeypatch.delenv("SATURATE_TASK_ID", raising=False)
+    monkeypatch.delenv("SATURATE_TASK", raising=False)
+    monkeypatch.delenv("CYCLUS_BACKEND", raising=False)
     cyclus_config_module._config_cache = {
         "project_root": str(tmp_path),
         "omh_backend": "files",
