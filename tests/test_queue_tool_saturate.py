@@ -214,12 +214,12 @@ def test_saturate_uses_file_queue_when_no_db(saturate_env):
 
 
 def test_saturate_mutating_without_task_id_returns_error(monkeypatch):
-    """Mutating actions fail fast when SATURATE_TASK is missing."""
+    """All Saturate actions fail fast when SATURATE_TASK is missing."""
     monkeypatch.setenv("CYCLUS_BACKEND", "saturate")
     monkeypatch.delenv("SATURATE_TASK", raising=False)
     monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
 
-    for action in ("write_state", "complete", "cancel"):
+    for action in ("write_state", "complete", "cancel", "claim", "dispatch", "post", "status"):
         result = json.loads(cyclus_queue_handler(
             {"action": action, "mode": "loop", "instance_id": "x",
              "state": {"x": 1}, "terminal_state": "Done"}

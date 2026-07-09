@@ -17,12 +17,16 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-# Module-level optional imports — None if saturate not installed
+# Module-level optional imports — independently guarded so SQLite unavailability
+# doesn't prevent use of the file-based Queue.
 try:
     from saturate.queue import Queue as SaturateQueue
-    from saturate.queue_sqlite import SqliteQueue
 except ImportError:
     SaturateQueue = None  # type: ignore[assignment,misc]
+
+try:
+    from saturate.queue_sqlite import SqliteQueue
+except ImportError:
     SqliteQueue = None  # type: ignore[assignment,misc]
 
 # Max chars of state payload posted to a Kanban comment to avoid leaks / size limits
@@ -90,19 +94,20 @@ def _get_saturate_queue():
     """Return the active Saturate Queue instance, using SATURATE_QUEUE_DIR.
 
     Queue selection:
-      - If SATURATE_QUEUE_DIR/saturate.db exists → SqliteQueue (concurrent-safe)
+      - If SATURATE_QUEUE_DIR/saturate.db exists AND SqliteQueue is available
+        → SqliteQueue (concurrent-safe)
       - Otherwise → file-based Queue
     This applies both when SATURATE_QUEUE_DIR is set and for the default path.
     """
-    if SaturateQueue is None or SqliteQueue is None:
+    if SaturateQueue is None:
         raise RuntimeError(
-            "Saturate backend requested (SATURATE_TASK is set) but the 'saturate' "
-            "package is not installed. Install with: uv add 'hermes-cyclus[saturate]'"
+            "Saturate backend requested but the 'saturate' package is not installed. "
+            "Install with: uv add 'hermes-cyclus[saturate]'"
         )
     import pathlib
     base = pathlib.Path(os.environ.get("SATURATE_QUEUE_DIR") or (pathlib.Path.home() / ".saturate"))
     db_path = base / "saturate.db"
-    if db_path.exists():
+    if db_path.exists() and SqliteQueue is not None:
         return SqliteQueue(base_dir=str(base))
     return SaturateQueue(base_dir=str(base))
 
@@ -113,9 +118,8 @@ def _saturate_action(action: str, args: dict) -> str:
     mode = args.get("mode", "")
     instance_id = args.get("instance_id", "")
 
-    # Mutating actions require a task_id — fail fast if missing
-    _mutating = {"write_state", "complete", "cancel"}
-    if not task_id and action in _mutating:
+    # All Saturate actions are task-scoped — require SATURATE_TASK for all
+    if not task_id:
         active_signals = [
             s for s in ("HERMES_KANBAN_TASK", "SATURATE_TASK", "CYCLUS_BACKEND")
             if os.environ.get(s)
@@ -124,7 +128,7 @@ def _saturate_action(action: str, args: dict) -> str:
             "error": (
                 f"action={action!r} requires a task_id but SATURATE_TASK is not set. "
                 f"Active backend signals: {active_signals or ['none']}. "
-                "Set SATURATE_TASK to the active Saturate task ID before calling mutating operations."
+                "Set SATURATE_TASK to the active Saturate task ID."
             )
         })
 

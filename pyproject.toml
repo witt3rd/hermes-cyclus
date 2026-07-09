@@ -18,7 +18,9 @@ dev = [
     "pytest-asyncio>=0.23",
 ]
 saturate = [
-    "saturate",
+    # Direct URL — works with pip, poetry, and uv without index lookup.
+    # Requires hatchling allow-direct-references = true (set above).
+    "saturate @ git+https://github.com/witt3rd/saturate",
 ]
 
 [project.entry-points."hermes_agent.plugins"]
@@ -37,6 +39,9 @@ pythonpath = [".."]
 
 [tool.ruff]
 line-length = 100
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
