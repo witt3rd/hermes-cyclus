@@ -16,7 +16,7 @@ metadata:
 
 ```
 HERMES_KANBAN_TASK set   →  Worker role  (Kanban/Saturate dispatched you)
-SATURATE_TASK set        →  Worker role  (Saturate dispatched you)
+SATURATE_TASK_ID set     →  Worker role  (Saturate dispatched you)
 Neither set              →  Dispatcher role  (you drive the loop)
 ```
 
@@ -44,7 +44,7 @@ You are the loop driver. You manage iterations until the plan is complete.
 ### Detection
 ```python
 import os
-is_worker = bool(os.environ.get("HERMES_KANBAN_TASK") or os.environ.get("SATURATE_TASK"))
+is_worker = bool(os.environ.get("HERMES_KANBAN_TASK") or os.environ.get("SATURATE_TASK_ID") or os.environ.get("SATURATE_TASK"))
 # if is_worker is False → you are the dispatcher
 ```
 
@@ -153,7 +153,7 @@ You received a single task to execute and verify. Do it and report back.
 ### Detection
 ```python
 import os
-task_id = os.environ.get("HERMES_KANBAN_TASK") or os.environ.get("SATURATE_TASK")
+task_id = os.environ.get("HERMES_KANBAN_TASK") or os.environ.get("SATURATE_TASK_ID") or os.environ.get("SATURATE_TASK")
 # task_id is set → you are a worker
 ```
 

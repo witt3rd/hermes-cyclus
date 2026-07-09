@@ -82,7 +82,8 @@ def _active_backend() -> str:
     """
     if os.environ.get("HERMES_KANBAN_TASK"):
         return "kanban"
-    if os.environ.get("SATURATE_TASK_ID"):
+    # Prefer SATURATE_TASK_ID (canonical); fall back to SATURATE_TASK for compatibility
+    if os.environ.get("SATURATE_TASK_ID") or os.environ.get("SATURATE_TASK"):
         return "saturate"
     backend = os.environ.get("CYCLUS_BACKEND", "").lower().strip()
     if backend in ("kanban", "saturate", "file", "filesystem"):
@@ -118,14 +119,15 @@ def _get_saturate_queue():
 
 def _saturate_action(action: str, args: dict) -> str:
     """Route cyclus_queue actions to the Saturate backend."""
-    task_id = os.environ.get("SATURATE_TASK_ID", "")
+    # Prefer SATURATE_TASK_ID (canonical); fall back to SATURATE_TASK for compatibility
+    task_id = os.environ.get("SATURATE_TASK_ID") or os.environ.get("SATURATE_TASK", "")
     mode = args.get("mode", "")
     instance_id = args.get("instance_id", "")
 
-    # All Saturate actions are task-scoped — require SATURATE_TASK for all
+    # All Saturate actions are task-scoped — require SATURATE_TASK_ID (or SATURATE_TASK) for all
     if not task_id:
         active_signals = [
-            s for s in ("HERMES_KANBAN_TASK", "SATURATE_TASK_ID", "CYCLUS_BACKEND")
+            s for s in ("HERMES_KANBAN_TASK", "SATURATE_TASK_ID", "SATURATE_TASK", "CYCLUS_BACKEND")
             if os.environ.get(s)
         ]
         return json.dumps({
