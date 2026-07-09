@@ -50,10 +50,26 @@ def _redact_state(state: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def _active_backend() -> str:
+    """Detect which backend is active.
+
+    Priority order:
+      1. HERMES_KANBAN_TASK — injected by Kanban dispatcher (identity signal, not overridable)
+      2. SATURATE_TASK      — injected by Saturate scheduler (identity signal, not overridable)
+      3. CYCLUS_BACKEND     — explicit user/skill choice (set via --backend modifier)
+      4. cyclus.backend in profile config (future)
+      5. file               — zero-config fallback
+
+    The --backend kanban|saturate|file skill modifier sets CYCLUS_BACKEND for
+    the duration of a skill invocation. This is distinct from the dispatcher
+    identity signals (1, 2) which are injected by infrastructure, not chosen by users.
+    """
     if os.environ.get("HERMES_KANBAN_TASK"):
         return "kanban"
     if os.environ.get("SATURATE_TASK"):
         return "saturate"
+    backend = os.environ.get("CYCLUS_BACKEND", "").lower().strip()
+    if backend in ("kanban", "saturate", "file", "filesystem"):
+        return "file" if backend == "filesystem" else backend
     return "file"
 
 
@@ -406,8 +422,11 @@ CYCLUS_QUEUE_SCHEMA = {
     "name": "cyclus_queue",
     "description": (
         "Cyclus work queue — backend-agnostic interface. "
-        "Routes to Kanban (HERMES_KANBAN_TASK), Saturate (SATURATE_TASK), "
-        "or file-based queue (default). "
+        "Backend is auto-detected in priority order: "
+        "(1) HERMES_KANBAN_TASK set → Kanban; "
+        "(2) SATURATE_TASK set → Saturate; "
+        "(3) CYCLUS_BACKEND env var → explicit choice (set via --backend kanban|saturate|file); "
+        "(4) file-based queue (default, zero-config). "
         "Actions: post | claim | release | write_state | cancel | complete | status | dispatch."
     ),
     "parameters": {
