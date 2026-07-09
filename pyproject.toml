@@ -43,6 +43,8 @@ packages = ["."]
 
 [tool.uv.sources]
 loop-spec-py = { git = "https://github.com/witt3rd/loop-spec", subdirectory = "python" }
+# Note: the 'saturate' extra requires uv to resolve this git source.
+# pip/poetry users must install saturate separately from its git repo.
 saturate = { git = "https://github.com/witt3rd/saturate" }
 
 [dependency-groups]

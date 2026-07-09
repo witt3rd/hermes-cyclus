@@ -172,9 +172,10 @@ def test_saturate_import_error_returns_error(saturate_env, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_saturate_uses_sqlite_when_db_exists(saturate_env, tmp_path):
+def test_saturate_uses_sqlite_when_db_exists(saturate_env):
     """When saturate.db exists in SATURATE_QUEUE_DIR, SqliteQueue is selected."""
-    db_path = tmp_path / "saturate.db"
+    queue_dir = Path(saturate_env["queue_dir"])
+    db_path = queue_dir / "saturate.db"
     db_path.touch()
 
     mock_instance = MagicMock()
@@ -188,12 +189,15 @@ def test_saturate_uses_sqlite_when_db_exists(saturate_env, tmp_path):
             {"action": "status", "mode": "loop", "instance_id": "x"}
         ))
     assert result["found"] is True
-    MockSql.assert_called_once_with(base_dir=str(tmp_path))
+    MockSql.assert_called_once_with(base_dir=str(queue_dir))
     MockFile.assert_not_called()
 
 
-def test_saturate_uses_file_queue_when_no_db(saturate_env, tmp_path):
+def test_saturate_uses_file_queue_when_no_db(saturate_env):
     """When no saturate.db exists, file-based Queue is selected."""
+    queue_dir = Path(saturate_env["queue_dir"])
+    # No db_path created — queue dir exists but has no saturate.db
+
     mock_instance = MagicMock()
     mock_instance.get.return_value = {"status": "running", "kind": "MetricOptimizationKind"}
     MockFile = MagicMock(return_value=mock_instance)
@@ -205,7 +209,7 @@ def test_saturate_uses_file_queue_when_no_db(saturate_env, tmp_path):
             {"action": "status", "mode": "loop", "instance_id": "x"}
         ))
     assert result["found"] is True
-    MockFile.assert_called_once_with(base_dir=str(tmp_path))
+    MockFile.assert_called_once_with(base_dir=str(queue_dir))
     MockSql.assert_not_called()
 
 

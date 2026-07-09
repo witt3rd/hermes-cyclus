@@ -116,10 +116,15 @@ def _saturate_action(action: str, args: dict) -> str:
     # Mutating actions require a task_id — fail fast if missing
     _mutating = {"write_state", "complete", "cancel"}
     if not task_id and action in _mutating:
+        active_signals = [
+            s for s in ("HERMES_KANBAN_TASK", "SATURATE_TASK", "CYCLUS_BACKEND")
+            if os.environ.get(s)
+        ]
         return json.dumps({
             "error": (
-                f"SATURATE_TASK is not set but action={action!r} requires a task_id. "
-                "Set SATURATE_TASK to the active task ID before calling mutating operations."
+                f"action={action!r} requires a task_id but SATURATE_TASK is not set. "
+                f"Active backend signals: {active_signals or ['none']}. "
+                "Set SATURATE_TASK to the active Saturate task ID before calling mutating operations."
             )
         })
 
@@ -156,7 +161,8 @@ def _saturate_action(action: str, args: dict) -> str:
             if err:
                 return json.dumps({"error": err})
             assert isinstance(terminal, str)
-            output = args.get("output") or {}
+            # Copy to avoid mutating caller's args dict
+            output = dict(args.get("output") or {})
             output["terminal_state"] = terminal
             q.complete(task_id, output)
             return json.dumps({"ok": True})
