@@ -70,15 +70,20 @@ target:                        0.85
 
 | # | Gap | Where | Effort |
 |---|-----|--------|--------|
-| 1 | `SSHExecutor` in Saturate | saturate | Medium |
-| 2 | Finetuning executor shell scripts (launch + poll + probe on gb10) | continuum | Medium |
-| 3 | `level: L2` + HUMAN_GATED cut decision integration | cyclus | Small |
-| 4 | Finetuning spec.yaml (this example) | here | Small |
-| 5 | Multi-machine swarm (gb10 + tensor in parallel) | saturate | Large |
+| 1 | **Postgres on roger** — replace SQLite as the shared durable queue | saturate | Small |
+| 2 | **Nomad cluster** — roger as server, gb10/tensor as clients via Tailscale | infra | Medium |
+| 3 | **Saturate→Nomad integration** — scheduler submits jobs to Nomad HTTP API | saturate | Medium |
+| 4 | **Finetuning shell scripts on gb10** — launch LLaMA-Factory, poll, probe | continuum | Medium |
+| 5 | **Finetuning spec.yaml** — `MetricOptimizationKind`, evaluate over Nomad dispatch | here | Small |
 
-**The meta-loop:** a `TaskExecutionKind` loop that closes gaps 1–4 in order,
-each task verified, until one real iteration (iteration 12) runs end-to-end
-via the loop. Gap 5 follows once 1–4 work.
+**The meta-loop:** a `TaskExecutionKind` loop that closes gaps 1–5 in order,
+each task verified, until one real finetuning iteration (iteration 12) runs
+end-to-end via the loop on gb10. The distributed swarm (gb10 + tensor in
+parallel) follows naturally once Nomad is up.
+
+**Note:** No SSHExecutor, no custom worker daemon. Nomad handles node
+registration, GPU allocation, and push dispatch. This is exactly
+what `ARCHITECTURE.md §Fleet Management / Phase 2` already specifies.
 
 ---
 
