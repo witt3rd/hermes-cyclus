@@ -72,9 +72,14 @@ MetricOptimizationKind  ← open-ended, runs until convergence
     │
     ├── evaluate: probe script on gb10 → signal_score JSON
     │
-    └── level: L1 initially (human reviews each hypothesis)
-        level: L2 once trust established (loop applies autonomously)
-        HUMAN_GATED cut decisions via ClarificationKind when plateau detected
+    └── level: L2 (autonomous)
+        Loop applies hypotheses and trains without human approval.
+        Human gates only on:
+          1. Budget exhaustion (cost ceiling reached — surface summary, await go-ahead)
+          2. Approach pivot (abandoning [[RECALL]] sequences for a fundamentally
+             different strategy — this is a strategic call, not a hyperparameter)
+        Everything else — LR, curriculum, epoch count, data mix — runs unattended.
+        Trust is established: 11 manual iterations already demonstrate the research arc.
 ```
 
 ---
