@@ -17,77 +17,30 @@ The loop's job is to continue writing it, automatically.
 ## Nested loop structure
 
 ```
-MetricOptimizationKind  ← outer loop: signal_score → 0.85
+MetricOptimizationKind  ← the only loop kind needed
 │  State: accumulated iteration history (currently 11 turns, manual)
 │  Each turn = one finetuning hypothesis tested end-to-end
 │
 └── Turn N:
     │
-    ├── HypothesisKind
-    │   One LLM call: read full iteration history → generate next
-    │   hyperparameter bet (lora_rank, lr, epochs, curriculum, data mix)
-    │   Output: LLaMA-Factory YAML config for this iteration
+    ├── executor: SSHExecutor (gap 3 below)
+    │   Applies the hypothesis: writes LLaMA-Factory YAML config on gb10,
+    │   launches training, waits for completion (blocking — the shell script
+    │   owns the polling loop internally via `while ps... ; do sleep 1800; done`)
+    │   Training runs 20–120 min. The executor's shell script handles it.
     │
-    ├── AsyncTrainingKind          ← NEW: not yet in loop-spec
-    │   Launch: ssh gb10 "llamafactory-cli train {config.yaml}"
-    │   Returns immediately. Training runs for 20–120 minutes.
-    │   │
-    │   └── PollingKind            ← nested: wake every 30 min
-    │       Check: process alive? loss curve sane? plateau?
-    │       │
-    │       └── ClarificationKind  ← nested: HUMAN_GATED, optional
-    │           Fires when: loss clearly diverged, or plateau before
-    │           expected convergence, or >N hours elapsed
-    │           Question: "Cut this run and learn from it, or keep waiting?"
-    │           Human or automated policy answers → loop resumes
+    ├── evaluate: shell script over SSH
+    │   Runs probe on gb10 → returns JSON with signal_score fields
+    │   Fast (~minutes) once training has finished
     │
-    ├── EvaluationKind
-    │   Run probe script on gb10 → extract three measurements:
-    │     trigger_recall   = P(model emits <|recall|> | recall context)
-    │     boundary_clean   = P(no emission | non-recall context)
-    │     signal_coherence = P(well-formed token pair | emission)
-    │   Composite: signal_score = weighted average ∈ [0, 1]
-    │   Current best: ~0.43 (iteration 11)
-    │   Target: ≥ 0.85
-    │
-    └── DocumentKind
-        Write iteration N summary to recipe.md and STATE.md:
-        hypothesis, config, loss curve (final loss, epoch), eval results,
-        what was learned, what to try next
+    └── level: L1 (propose only) or L2 (apply + confirm)
+        At L1: loop proposes the next config, human reviews before training starts
+        At L2: loop applies and trains autonomously; human gates only on cut decisions
+        HUMAN_GATED ClarificationKind tasks handle ambiguous cut decisions
+        via the existing queue mechanism — no new loop kind needed
 ```
 
----
-
-## What each loop kind does
-
-### MetricOptimizationKind (outer)
-The familiar pattern — same as function_minimization, circle_packing.
-Hypothesis → measure → keep/revert → next hypothesis.
-What's different: the "measure" step is hours, not seconds.
-
-### AsyncTrainingKind (new)
-Launches a long-running process on a remote machine.
-Does NOT block waiting for it. Returns a handle.
-The handle is polled by the inner PollingKind loop.
-
-This is the key architectural gap. Everything else follows from it.
-
-### PollingKind (new)
-Runs on a timer. Each wake: check process status, read partial logs,
-decide continue/cut/done. Returns when training terminates naturally OR
-a cut decision is made.
-
-Polling interval is a design parameter — 30 min for finetuning,
-5 min for faster jobs. The loop wakes on cron, checks, goes back to sleep.
-
-### ClarificationKind (existing, nested)
-HUMAN_GATED. Fires when the polling loop detects something ambiguous.
-The human (or an automated policy) decides cut vs continue.
-Existing `HUMAN_GATED` queue semantics handle this correctly.
-
-### EvaluationKind (future name for inline eval)
-Fast synchronous measurement after training completes.
-Could be a `MetricOptimizationKind` inner spec or just a shell command.
+The asyncness, polling, and cut decisions live in **shell scripts and executor behavior** — not in new loop kinds. Loop-spec stays general-purpose.
 
 ---
 
@@ -115,21 +68,17 @@ target:                        0.85
 
 ## Gaps to close (the meta-loop's task list)
 
-These must exist before the finetuning loop can run:
-
 | # | Gap | Where | Effort |
 |---|-----|--------|--------|
-| 1 | `AsyncTrainingKind` in loop-spec | loop-spec | Medium |
-| 2 | `PollingKind` in loop-spec | loop-spec | Medium |
-| 3 | `SSHExecutor` in Saturate | saturate | Medium |
-| 4 | Cron-based poll wakeup | cyclus/hermes | Small |
-| 5 | `AsyncTrainingKind` in cyclus_queue | cyclus | Small |
-| 6 | Finetuning spec.yaml (this example) | here | Small |
-| 7 | Multi-machine swarm (gb10 + tensor in parallel) | saturate | Large |
+| 1 | `SSHExecutor` in Saturate | saturate | Medium |
+| 2 | Finetuning executor shell scripts (launch + poll + probe on gb10) | continuum | Medium |
+| 3 | `level: L2` + HUMAN_GATED cut decision integration | cyclus | Small |
+| 4 | Finetuning spec.yaml (this example) | here | Small |
+| 5 | Multi-machine swarm (gb10 + tensor in parallel) | saturate | Large |
 
-**The meta-loop:** a `TaskExecutionKind` loop that closes gaps 1–6 in order,
-each task verified by a test, until the finetuning loop spec validates
-and one real iteration runs end-to-end. Gap 7 follows naturally once 1–6 work.
+**The meta-loop:** a `TaskExecutionKind` loop that closes gaps 1–4 in order,
+each task verified, until one real iteration (iteration 12) runs end-to-end
+via the loop. Gap 5 follows once 1–4 work.
 
 ---
 
