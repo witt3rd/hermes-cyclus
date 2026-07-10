@@ -1,148 +1,164 @@
-# finetuning — AutoresearchKind Loop Example
+# finetuning — Autoresearch Loop Example
 
-This directory documents the **finetuning example** for Cyclus:
-running an automated LLM finetuning research loop that iterates hypotheses
-until a signal token finetuning task converges.
+This directory documents the **finetuning autoresearch loop** for Cyclus:
+automating the LLM finetuning research cycle that has been running manually
+for 11 iterations in `~/src/witt3rd/continuum/docs/finetuning/llamafactory_recipe.md`.
 
-## The problem this loop solves
+---
 
-LLM finetuning research has a brutal time structure:
-- Each run takes 20–120 minutes of GPU time
-- You can't know if a hypothesis was wrong until the run finishes
-- Between runs you must: examine loss curves, evaluate outputs, form a
-  new hypothesis, adjust config, kick off the next run
-- 10+ iterations are typical before convergence
-- Human attention is the bottleneck — not GPU compute
+## The core insight
 
-This is exactly what `MetricOptimizationKind` loops were designed for.
+The `llamafactory_recipe.md` document IS this loop's `STATE.md` — written by hand.
+Each of the 11 iterations is one turn of a `MetricOptimizationKind` loop.
+The loop's job is to continue writing it, automatically.
 
-## The specific task
+---
 
-Finetune **MiniCPM-o 4.5** via **LLaMA-Factory** to emit structured
-signal tokens (`<|recall|>`, `<|think|>`, etc.) at the right moments
-in conversation — enabling Continuum's harness to detect and route
-them to the appropriate action (memory recall, deep reasoning, etc.).
-
-Progress is tracked in:
-`~/src/witt3rd/continuum/docs/finetuning/llamafactory_recipe.md`
-(10–11 iterations documented, still converging as of 2026-07-10)
-
-## What a single loop iteration looks like
+## Nested loop structure
 
 ```
-1. PROPOSE:    Select hyperparameter configuration (lora_rank, lr, epochs,
-               data mix, curriculum strategy, etc.)
-2. SETUP:      Write LLaMA-Factory YAML config, register dataset
-3. KICK OFF:   Launch training on GPU host (gb10, omarchy, or tensor)
-               via SSH — this returns immediately, training runs async
-4. MONITOR:    Poll training process periodically (every 10–30 min)
-               Check: still running? loss curve sane? early stop triggered?
-5. DECIDE:     When training ends (or plateau detected):
-               - Evaluate: run probe script, check trigger/boundary metrics
-               - KEEP: update baseline, record learning, propose next hypothesis
-               - CUT:  loss diverged or clearly overfit — stop early, record why
-6. DOCUMENT:   Write iteration summary to docs/finetuning/
-7. REPEAT
+MetricOptimizationKind  ← outer loop: signal_score → 0.85
+│  State: accumulated iteration history (currently 11 turns, manual)
+│  Each turn = one finetuning hypothesis tested end-to-end
+│
+└── Turn N:
+    │
+    ├── HypothesisKind
+    │   One LLM call: read full iteration history → generate next
+    │   hyperparameter bet (lora_rank, lr, epochs, curriculum, data mix)
+    │   Output: LLaMA-Factory YAML config for this iteration
+    │
+    ├── AsyncTrainingKind          ← NEW: not yet in loop-spec
+    │   Launch: ssh gb10 "llamafactory-cli train {config.yaml}"
+    │   Returns immediately. Training runs for 20–120 minutes.
+    │   │
+    │   └── PollingKind            ← nested: wake every 30 min
+    │       Check: process alive? loss curve sane? plateau?
+    │       │
+    │       └── ClarificationKind  ← nested: HUMAN_GATED, optional
+    │           Fires when: loss clearly diverged, or plateau before
+    │           expected convergence, or >N hours elapsed
+    │           Question: "Cut this run and learn from it, or keep waiting?"
+    │           Human or automated policy answers → loop resumes
+    │
+    ├── EvaluationKind
+    │   Run probe script on gb10 → extract three measurements:
+    │     trigger_recall   = P(model emits <|recall|> | recall context)
+    │     boundary_clean   = P(no emission | non-recall context)
+    │     signal_coherence = P(well-formed token pair | emission)
+    │   Composite: signal_score = weighted average ∈ [0, 1]
+    │   Current best: ~0.43 (iteration 11)
+    │   Target: ≥ 0.85
+    │
+    └── DocumentKind
+        Write iteration N summary to recipe.md and STATE.md:
+        hypothesis, config, loss curve (final loss, epoch), eval results,
+        what was learned, what to try next
 ```
 
-## Why this requires new loop machinery
+---
 
-Standard `MetricOptimizationKind` assumes:
-- Each iteration is a fast subprocess call (seconds to minutes)
-- The eval command runs synchronously after the hypothesis
+## What each loop kind does
 
-Finetuning requires:
-- **Async execution**: training is a long-running process launched via SSH,
-  NOT a blocking subprocess. The loop must launch and return, then poll.
-- **Time-gated polling**: check every N minutes, not after each step
-- **Human-in-loop gates**: some decisions (cut vs wait) benefit from human
-  judgment, especially early in the research arc
-- **Multi-machine dispatch**: N GPU machines running N hypotheses in parallel
-  is the natural swarm mode — different hyperparameter seeds, different
-  curriculum strategies, race to the best metric
-- **Rich state**: iteration history, loss curves, eval probe results, and
-  the accumulated research notes must persist and be readable by each new
-  iteration's reasoning
+### MetricOptimizationKind (outer)
+The familiar pattern — same as function_minimization, circle_packing.
+Hypothesis → measure → keep/revert → next hypothesis.
+What's different: the "measure" step is hours, not seconds.
 
-## What we need to build (the meta-loop)
+### AsyncTrainingKind (new)
+Launches a long-running process on a remote machine.
+Does NOT block waiting for it. Returns a handle.
+The handle is polled by the inner PollingKind loop.
 
-This example is both:
-1. The **end goal** — a working finetuning autoresearch loop
-2. The **design surface** — revealing what Cyclus needs to support it
+This is the key architectural gap. Everything else follows from it.
 
-Gaps to close before this loop can run:
+### PollingKind (new)
+Runs on a timer. Each wake: check process status, read partial logs,
+decide continue/cut/done. Returns when training terminates naturally OR
+a cut decision is made.
 
-### Gap 1: AsyncExecutionKind (new loop kind)
-The training job is launched async and polled. This isn't
-`MetricOptimizationKind` (synchronous eval) or `TaskExecutionKind` (linear
-plan). We need:
-```yaml
-kind: AsyncExecutionKind
-launch_command: |
-  ssh gb10 "cd ~/src/ext/LLaMA-Factory && llamafactory-cli train configs/{config}.yaml"
-poll_command: |
-  ssh gb10 "ps aux | grep llamafactory | grep -v grep"
-poll_interval_seconds: 1800   # check every 30 minutes
-terminal_conditions:
-  process_dead: true           # training finished
-  loss_plateau: 5              # N consecutive checks with <1% loss change
-eval_command: |
-  ssh gb10 "python3 ~/src/witt3rd/continuum/scripts/probe_signal_tokens.py"
+Polling interval is a design parameter — 30 min for finetuning,
+5 min for faster jobs. The loop wakes on cron, checks, goes back to sleep.
+
+### ClarificationKind (existing, nested)
+HUMAN_GATED. Fires when the polling loop detects something ambiguous.
+The human (or an automated policy) decides cut vs continue.
+Existing `HUMAN_GATED` queue semantics handle this correctly.
+
+### EvaluationKind (future name for inline eval)
+Fast synchronous measurement after training completes.
+Could be a `MetricOptimizationKind` inner spec or just a shell command.
+
+---
+
+## The metric
+
+```python
+signal_score = (
+    0.4 * trigger_recall      # does the signal fire when it should?
+  + 0.4 * boundary_clean      # does it NOT fire when it shouldn't?
+  + 0.2 * signal_coherence    # are emitted tokens well-formed?
+)
 ```
 
-### Gap 2: SSHExecutor (new executor type)
-The hypothesis runs on a REMOTE machine, not locally.
-`HermesExecutor` and `ShellExecutor` both run locally. We need:
-```yaml
-executor:
-  type: ssh
-  host: gb10
-  setup_command: "source ~/llamafactory-venv/bin/activate"
+History:
+```
+v1–v7:   failed (wrong model class, embedding issues, overfit)  ~0.0
+v8:      first signal          0.08
+v9:      [[RECALL]] pivot      0.43  ← current best
+v10:     curriculum Phase 1    0.45  (suppression only)
+v11:     curriculum Phase 2    0.43  (regression — sequence assembly broken)
+target:                        0.85
 ```
 
-### Gap 3: Durable long-running state
-Each iteration can span hours. State must survive:
-- Network interruptions
-- Manual inspection
-- Multiple poll wakeups
+---
 
-The `STATE.md` + SQLite pattern already handles this, but the poll
-wakeup mechanism needs explicit support.
+## Gaps to close (the meta-loop's task list)
 
-### Gap 4: Human-gated cut decisions
-Sometimes you want the loop to surface the current loss curve and ask
-before cutting. This is `ClarificationKind` nested inside the iteration.
-`HUMAN_GATED` tasks in the queue handle this — but the integration
-needs to be documented and tested.
+These must exist before the finetuning loop can run:
 
-### Gap 5: Multi-machine swarm
-Running hypothesis A on gb10 and hypothesis B on tensor simultaneously.
-Saturate's distributed mode handles this once SSH dispatch works.
+| # | Gap | Where | Effort |
+|---|-----|--------|--------|
+| 1 | `AsyncTrainingKind` in loop-spec | loop-spec | Medium |
+| 2 | `PollingKind` in loop-spec | loop-spec | Medium |
+| 3 | `SSHExecutor` in Saturate | saturate | Medium |
+| 4 | Cron-based poll wakeup | cyclus/hermes | Small |
+| 5 | `AsyncTrainingKind` in cyclus_queue | cyclus | Small |
+| 6 | Finetuning spec.yaml (this example) | here | Small |
+| 7 | Multi-machine swarm (gb10 + tensor in parallel) | saturate | Large |
 
-## Metric
+**The meta-loop:** a `TaskExecutionKind` loop that closes gaps 1–6 in order,
+each task verified by a test, until the finetuning loop spec validates
+and one real iteration runs end-to-end. Gap 7 follows naturally once 1–6 work.
 
-The finetuning metric is a composite of three probe measurements:
+---
+
+## Distributed execution (gap 7 — future)
+
+Once `SSHExecutor` works:
 
 ```
-trigger_recall   = fraction of recall contexts where model emits <|recall|>
-boundary_clean   = fraction of non-recall contexts where model does NOT emit
-signal_coherence = fraction of emitted signals with well-formed token pairs
+Turn N swarm:
+  Worker A → hypothesis_seed="conservative" → gb10
+  Worker B → hypothesis_seed="aggressive_lr" → tensor
+  Worker C → hypothesis_seed="curriculum_v2" → omarchy
+  
+  All three run in parallel. Verifier picks the best signal_score.
+  Winner becomes the new baseline. Loop continues.
 ```
 
-Combined into a single `signal_score ∈ [0, 1]`. Target: ≥ 0.85.
-Current best: ~0.43 (iteration 11, v9 MiniCPM curriculum training).
+This is Saturate's `BatchKind` pattern applied to GPU finetuning.
+N machines × M parallel hypotheses per iteration.
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `spec.yaml` | Loop spec (to be written once AsyncExecutionKind exists) |
-| `state/` | Per-iteration state (loss curves, eval results, notes) |
-| `configs/` | LLaMA-Factory YAML configs per iteration |
-| `docs/` | Human-readable iteration log |
+---
 
 ## Reference
 
-- Full iteration history: `~/src/witt3rd/continuum/docs/finetuning/llamafactory_recipe.md`
-- Signal token design: `~/src/witt3rd/continuum/docs/continuum_architecture.md`
-- MiniCPM-o cookbook: `~/src/ext/MiniCPM-V-CookBook/finetune/llamafactory/finetune_llamafactory.md`
+- Full iteration history (11 turns, manual):
+  `~/src/witt3rd/continuum/docs/finetuning/llamafactory_recipe.md`
+- Signal token design:
+  `~/src/witt3rd/continuum/docs/continuum_architecture.md`
+- MiniCPM-o cookbook:
+  `~/src/ext/MiniCPM-V-CookBook/finetune/llamafactory/finetune_llamafactory.md`
+- Model on gb10: `/home/dt/minicpm-o-4_5/`
+- Training data: `/mnt/nasty/training/continuum-signal-v1/dataset/`
