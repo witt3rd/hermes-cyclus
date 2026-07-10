@@ -59,10 +59,12 @@ isolated from the Postgres check so a failure here is unambiguous.
 
 Files owned: none (verification only)
 
-Acceptance criteria (2 independent assertions — failure names the broken precondition):
+Acceptance criteria (single assertion — the gb10 Tailscale peer's `HostName`
+field is literally `gx10`, not `gb10`; its `DNSName`/SSH-alias is
+`gb10.taild2070b.ts.net`, hostname is not — SSH reachability is what actually
+reflects usability):
 
-1. Tailscale sees gb10 online: `tailscale status --json | jq -e '.Peer[] | select(.HostName=="gb10") | .Online == true'`
-2. SSH to gb10 succeeds: `ssh gb10 'echo ok'`
+1. SSH to gb10 succeeds: `ssh gb10 'echo ok'`
 
 Dependencies: Task 0
 Estimated budget: 150s
@@ -267,23 +269,27 @@ Description: Write `continuum/goals/minicpm-recall-signal.yaml` for Goal 1.
 Training lives in `executor` (the hypothesis/apply step), NOT embedded in
 `evaluate` (which must stay read-only measurement per the required
 hypothesis→evaluate→correctness→keep-or-revert cycle). Explicit `terminal:`
-block using the README's already-decided values — without this the spec
-would silently inherit `loop_spec`'s library defaults
-(`max_iterations: 100, plateau_count: 10`) for a real, expensive,
-gb10-distributed research loop nobody reviewed. `level: L2` is retained
-exactly as previously ratified (Goal 1's L2-autonomous-with-DRI-gating
-governance, documented in `examples/finetuning/README.md` — not a fresh
-proposal subject to the first-loop L1 rule). This file is written and
-schema-validated only — NOT run/executed by this loop.
+block with DRI-reviewed values — without this the spec would silently inherit
+`loop_spec`'s library defaults (`max_iterations: 100, plateau_count: 10`) for
+a real, expensive, gb10-distributed research loop nobody reviewed.
+`level: L1` (report-only): first-loop posture — the loop measures, proposes,
+and reports; it does NOT apply changes autonomously. L2 requires demonstrated
+safety at L1 first. This is the first MetricOptimizationKind loop against an
+expensive distributed gb10 pipeline; trust is earned through observed cycles,
+not assumed from prior DRI governance on a different question. This file is
+written and schema-validated only — NOT run/executed by this loop.
 
 ```yaml
 kind: MetricOptimizationKind
 name: minicpm-recall-signal
-level: L2
+level: L1
 metric: signal_score
 direction: higher_is_better
 baseline: 0.43
 terminal:
+  # Explicit — reviewed by DRI. Do not inherit library defaults.
+  # max_iterations: 200 — runway for 0.85 target given ~11 manual iterations done.
+  # plateau_count: 15 — ML curves plateau transiently; 15 signals true convergence.
   max_iterations: 200
   plateau_count: 15
   target_score: 0.85
@@ -300,7 +306,10 @@ target_files:
 
 Files owned: `continuum/goals/minicpm-recall-signal.yaml`
 
-Acceptance criteria: `python3 -c "from loop_spec import load_spec; s = load_spec('continuum/goals/minicpm-recall-signal.yaml'); assert s.kind == 'MetricOptimizationKind'; assert s.level == 'L2'; assert s.executor is not None; assert 'train_recall_signal.py' not in s.evaluate; assert s.terminal is not None; assert s.terminal.max_iterations == 200; assert s.terminal.plateau_count == 15; assert s.terminal.target_score == 0.85"`
+Acceptance criteria:
+1. Schema validation: `python3 -c "from loop_spec import load_spec; s = load_spec('continuum/goals/minicpm-recall-signal.yaml'); assert s.kind == 'MetricOptimizationKind'; assert s.level == 'L1', f'expected L1, got {s.level}'; assert s.executor is not None; assert 'train_recall_signal.py' not in s.evaluate; assert s.terminal is not None; assert s.terminal.max_iterations == 200; assert s.terminal.plateau_count == 15; assert s.terminal.target_score == 0.85; print('PASS')"`
+2. Terminal block is explicit (non-default): `python3 -c "import yaml; d = yaml.safe_load(open('continuum/goals/minicpm-recall-signal.yaml')); assert 'terminal' in d, 'terminal block missing'; t = d['terminal']; assert t.get('max_iterations') == 200; assert t.get('plateau_count') == 15; assert t.get('target_score') == 0.85; print('terminal block PASS')"`
+3. Level is L1: `python3 -c "import yaml; d = yaml.safe_load(open('continuum/goals/minicpm-recall-signal.yaml')); assert d.get('level') == 'L1', f"expected L1 got {d.get('level')}"; print('level L1 PASS')"`
 
 Dependencies: none
 Estimated budget: 300s
