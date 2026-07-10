@@ -72,14 +72,22 @@ MetricOptimizationKind  ← open-ended, runs until convergence
     │
     ├── evaluate: probe script on gb10 → signal_score JSON
     │
-    └── level: L2 (autonomous)
-        Loop applies hypotheses and trains without human approval.
+    └── level: L2 (autonomous) with DRI gating, not human gating
+        The DRI (Decision-maker Role Instance) is whoever can evaluate whether
+        the plan still serves the original intent. For finetuning research, that
+        is NOT necessarily the human — it can be an external ML expert LLM.
+
+        DRI role in this loop: a ConsensusKind sub-loop that queries
+        Gemini + Grok as external advisors before each new hypothesis is applied.
+        (This mirrors the manual arc: 11 iterations already consulted Gemini and
+        Grok to advise on next-iteration plans — the loop formalizes that pattern.)
+
         Human gates only on:
           1. Budget exhaustion (cost ceiling reached — surface summary, await go-ahead)
           2. Approach pivot (abandoning [[RECALL]] sequences for a fundamentally
-             different strategy — this is a strategic call, not a hyperparameter)
-        Everything else — LR, curriculum, epoch count, data mix — runs unattended.
-        Trust is established: 11 manual iterations already demonstrate the research arc.
+             different strategy — strategic call that transcends ML expertise)
+        Everything else — including hypothesis generation — runs via DRI consensus,
+        not human approval. The human is not the bottleneck.
 ```
 
 ---
