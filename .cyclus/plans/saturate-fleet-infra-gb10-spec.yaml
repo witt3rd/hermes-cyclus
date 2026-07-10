@@ -1,0 +1,24 @@
+kind: TaskExecutionKind
+name: saturate-fleet-infra-gb10
+level: L1
+terminal:
+  max_iterations: 28   # 15 tasks + ~87% retry buffer
+plan_path: ./saturate-fleet-infra-gb10-plan.md
+target_files:
+  - saturate/queue_postgres.py
+  - saturate/queue_factory.py
+  - saturate/cli.py
+  - saturate/runner_proc.py
+  - saturate/scheduler.py
+  - infra/postgres/docker-compose.yaml
+  - infra/postgres/schema.sql
+  - infra/nomad/server.hcl
+  - infra/nomad/client-gb10.hcl
+  - infra/nomad/saturate-runner-gb10.nomad.hcl
+  - infra/nomad/systemd/nomad-server.service
+  - infra/nomad/systemd/nomad-client-gb10.service
+  - continuum/scripts/eval_recall_signal.py
+  - continuum/scripts/train_recall_signal.py
+  - continuum/goals/minicpm-recall-signal.yaml
+executor: null
+output_dir: ./output/saturate-fleet-infra-gb10
