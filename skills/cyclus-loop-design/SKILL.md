@@ -241,3 +241,10 @@ the plan serves the original intent.
   If you and the member are both present and the work is trivially obvious,
   declare `active-pairing` in STATE.md and proceed directly. cyclus-loop-design
   is for autonomous, recurring, or complex work.
+
+**Read `references/pitfalls.md` for earned pitfalls from real runs** — mocked
+e2e tests giving false confidence, terminal conditions dropped between plan
+and task body, autonomous loops blocked by missing branch setup, completion
+with no delivery signal, subagent timeouts with zero artifacts, and closing
+tasks that discover — but must not silently resolve — a divergence from what
+the design consensus ratified.
