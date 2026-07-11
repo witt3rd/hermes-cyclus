@@ -11,6 +11,7 @@ The plugin name is `cyclus`. Tool prefix is `cyclus_`. Skill prefix is `cyclus-`
 ## Repository layout
 
 ```
+DOCTRINE.md           founding doctrine — what Cyclus is and is for
 ARCHITECTURE.md       loop taxonomy, queue interface, Saturate handoff contract
 PRINCIPLES.md         load-bearing design constraints for contributors
 README.md             user-facing overview
@@ -35,10 +36,15 @@ uv sync
 uv run pytest cyclus/tests/ -q   # must pass before any commit
 ```
 
-## Principles
+## Doctrine and Principles
 
-Read `PRINCIPLES.md` before contributing. The nine principles are non-negotiable
-constraints — every PR is evaluated against them.
+Read `DOCTRINE.md` before `PRINCIPLES.md`. Doctrine names what Cyclus is and
+is for — it is stable and rarely changes. Principles descend from doctrine
+and name what matters when designing the system; the nine principles are
+non-negotiable constraints — every PR is evaluated against them. If a
+proposal conflicts with a principle, the principle wins unless rectified.
+If a principle conflicts with doctrine, doctrine wins — that should never
+happen, and if it does, the principle is what needs fixing.
 
 ## Queue interface
 
