@@ -212,7 +212,15 @@ def claim(
 
     # Active: running or stale
     if active.exists():
-        data = _read_json(active)
+        # _write_json is not atomic (truncate-then-write) — a concurrent
+        # winner of the pending->active rename may still be mid-write here.
+        # Treat a transient unreadable file the same as "freshly claimed by
+        # someone else": back off with status="running", don't propagate
+        # the read error. See issue #31.
+        try:
+            data = _read_json(active)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return ClaimResult(status="running", item=None)
         last_hb = data.get("last_heartbeat")
         stale = True
         if last_hb:
