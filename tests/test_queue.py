@@ -398,7 +398,7 @@ def test_file_queue_claim_is_atomic(queue_env):
     assert results.count("not_found") + results.count("running") == 1
 
 
-def test_file_queue_claim_is_atomic_under_repeated_stress(queue_env, monkeypatch):
+def test_file_queue_claim_is_atomic_under_repeated_stress(queue_env):
     """Regression test for issue #31.
 
     test_file_queue_claim_is_atomic above runs the race exactly once per
@@ -421,13 +421,18 @@ def test_file_queue_claim_is_atomic_under_repeated_stress(queue_env, monkeypatch
     n_threads = 6
     total_errors: list[str] = []
 
-    for round_i in range(n_rounds):
+    for _ in range(n_rounds):
         tmp = Path(tempfile.mkdtemp())
-        monkeypatch.setattr(
-            cyclus_config_module,
-            "_config_cache",
-            {"project_root": str(tmp), "omh_backend": "files"},
-        )
+        # Direct assignment (not monkeypatch.setattr): queue_env's own
+        # teardown resets _config_cache to None after this test returns.
+        # monkeypatch's teardown runs *after* queue_env's (fixture teardown
+        # is reverse-of-setup order, and queue_env depends on monkeypatch),
+        # so a monkeypatch.setattr here would restore the last round's dict
+        # over queue_env's None reset, leaking config into later tests.
+        cyclus_config_module._config_cache = {
+            "project_root": str(tmp),
+            "omh_backend": "files",
+        }
 
         post(mode="loop", instance_id="atomic-stress", kind="TaskExecutionKind", name="Atomic")
 
