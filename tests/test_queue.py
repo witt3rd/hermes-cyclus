@@ -398,6 +398,71 @@ def test_file_queue_claim_is_atomic(queue_env):
     assert results.count("not_found") + results.count("running") == 1
 
 
+def test_file_queue_claim_is_atomic_under_repeated_stress(queue_env):
+    """Regression test for issue #31.
+
+    test_file_queue_claim_is_atomic above runs the race exactly once per
+    invocation — the specific interleaving that produced issue #31 (an
+    unguarded json.loads() on the active/ file while a concurrent winner's
+    non-atomic _write_json() truncate-then-write is still in flight) is rare
+    enough that a single 2-thread race can pass cleanly while the bug is
+    still present. This test repeats the race with more threads across many
+    fresh queues in one process to raise the probability of hitting the
+    window and catch a regression that the single-shot test would miss.
+
+    Confirmed against a reverted fix: ~8% of individual claim() calls raised
+    'Expecting value: line 1 column 1 (char 0)' under this same stress
+    profile (146/1800 calls). With the fix, 0/1800.
+    """
+    import shutil
+    import tempfile
+
+    n_rounds = 100
+    n_threads = 6
+    total_errors: list[str] = []
+
+    for _ in range(n_rounds):
+        tmp = Path(tempfile.mkdtemp())
+        # Direct assignment (not monkeypatch.setattr): queue_env's own
+        # teardown resets _config_cache to None after this test returns.
+        # monkeypatch's teardown runs *after* queue_env's (fixture teardown
+        # is reverse-of-setup order, and queue_env depends on monkeypatch),
+        # so a monkeypatch.setattr here would restore the last round's dict
+        # over queue_env's None reset, leaking config into later tests.
+        cyclus_config_module._config_cache = {
+            "project_root": str(tmp),
+            "omh_backend": "files",
+        }
+
+        post(mode="loop", instance_id="atomic-stress", kind="TaskExecutionKind", name="Atomic")
+
+        results: list[str] = []
+        errors: list[str] = []
+
+        def do_claim() -> None:
+            try:
+                r = claim(mode="loop", instance_id="atomic-stress")
+                results.append(r.status)
+            except Exception as e:  # noqa: BLE001 — any exception here is the bug
+                errors.append(str(e))
+
+        threads = [threading.Thread(target=do_claim) for _ in range(n_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        if errors:
+            total_errors.extend(errors)
+
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    assert not total_errors, (
+        f"{len(total_errors)}/{n_rounds * n_threads} claim() calls raised "
+        f"an exception instead of returning a ClaimResult: {total_errors[:5]}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Additional operations
 # ---------------------------------------------------------------------------
