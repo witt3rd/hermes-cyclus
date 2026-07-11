@@ -58,6 +58,10 @@ Development. Why the discipline matters, the six-step cycle (RECOGNIZE →
 SPECIFY → DECOMPOSE → DECLARE → DISPATCH → INTERPRET), and why a timeout
 means decompose smaller, never bypass.
 
+**Contributing?** Read [`DOCTRINE.md`](DOCTRINE.md) and
+[`PRINCIPLES.md`](PRINCIPLES.md) first — doctrine names what Cyclus is and
+is for; principles name what matters when designing the system that does it.
+
 ---
 
 ## Loop kinds

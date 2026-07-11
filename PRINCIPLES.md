@@ -1,30 +1,37 @@
-# OMH Principles
+# Cyclus Principles
 
-These are the load-bearing constraints for OMH design and implementation.
-Each principle names the failure it prevents. Subagents in any ralplan run
-must honor all of them unless explicitly contesting one with principled grounds.
+These are the load-bearing constraints for Cyclus design and implementation.
+Each principle names the failure it prevents. Subagents in any consensus-plan
+run must honor all of them unless explicitly contesting one with principled grounds.
+
+These principles descend from `DOCTRINE.md` — read that first. Doctrine says
+what Cyclus is *for*; these principles say what matters when *designing the
+system* that does it. When a principle and a proposal conflict, the principle
+wins unless the principle itself is rectified. When a principle and doctrine
+conflict, doctrine wins — that should never happen, and if it does, the
+principle is wrong.
 
 ---
 
-## P1 — OMH uniquely owns the deliberation patterns; not the plumbing
+## P1 — Cyclus uniquely owns the deliberation patterns; not the plumbing
 
-OMH's identity is adversarial-consensus planning (ralplan), fan-out-synthesize-
-verify research (deep-research), Socratic requirements (deep-interview),
-multi-role triage, and the pitfalls authored from real runs. The mechanism
-that executes those patterns belongs to Hermes and Saturate.
+Cyclus's identity is adversarial-consensus planning (cyclus-plan),
+fan-out-synthesize-verify research (cyclus-research), Socratic requirements
+(cyclus-interview), multi-role triage, and the pitfalls authored from real
+runs. The mechanism that executes those patterns belongs to Hermes and Saturate.
 
 **Failure it prevents:** building bespoke infrastructure (state engines,
 result-persistence contracts, role-injection hooks) that the platform already
 provides or will provide — at permanent maintenance cost.
 
-## P2 — OMH major version tracks the Hermes feature line
+## P2 — Cyclus major version tracks the Hermes feature line
 
-OMH v18 targets Hermes v0.18.x and uses its native primitives. A skill or
+Cyclus v18 targets Hermes v0.18.x and uses its native primitives. A skill or
 plugin behavior that assumes Kanban, background delegation, or the verification
 ledger does not work on a prior Hermes. The dependency is real; the version
 string makes it legible.
 
-**Failure it prevents:** OMH running on a Hermes version that lacks the
+**Failure it prevents:** Cyclus running on a Hermes version that lacks the
 primitives it assumes, silently failing or requiring undocumented workarounds.
 
 ## P3 — Native primitive over bespoke; bespoke only where the invariant genuinely diverges
@@ -43,7 +50,7 @@ system, each carrying permanent maintenance cost that upstream absorbs for free.
 The 15 role prompts (executor, verifier, architect, critic, planner,
 researcher, synthesist, skeptic, analyst, triage-maintainer, triage-skeptic,
 code-reviewer, security-reviewer, test-engineer, debugger) were refined
-through real runs. They are OMH's primary intellectual property.
+through real runs. They are Cyclus's primary intellectual property.
 
 The *mechanism* that injects them (the `[cyclus-role:NAME]` marker passed
 in the goal string) is how roles travel. Role prompts are loaded explicitly
@@ -54,16 +61,16 @@ catalog loader.
 **Failure it prevents:** deleting role prompts as part of bespoke-deletion
 (wrong) or keeping bespoke injection machinery (wrong).
 
-## P5 — Every OMH skill is a Saturate loop kind; backend is runtime configuration
+## P5 — Every Cyclus skill is a Saturate loop kind; backend is runtime configuration
 
-Every OMH skill maps to a Saturate loop kind (`ConsensusKind`,
+Every Cyclus skill maps to a Saturate loop kind (`ConsensusKind`,
 `TaskExecutionKind`, `InformationSeekingKind`, `ClarificationKind`,
 `MetricOptimizationKind`, `SelectionKind`). The kind determines iteration
 semantics, turn result types, terminal states, and spec schema. Skills are
 written against the four-operation queue interface (`post`, `claim`,
-`write_state`, `complete`). The execution backend — OMH internal queue,
-Kanban if enabled, Saturate if configured — is detected at runtime by the
-plugin and is invisible to skill prose.
+`write_state`, `complete`). The execution backend — Cyclus's own file-based
+queue, Kanban if enabled, Saturate if configured — is detected at runtime by
+the plugin and is invisible to skill prose.
 
 **Failure it prevents:** writing skill prose against a specific backend's API
 such that switching backends requires rewriting skills. The backend is
@@ -95,32 +102,37 @@ with time, not shrinks.
 
 ## P8 — `ClarificationKind.HUMAN_GATED` is a structural property, not a configuration
 
-`cyclus-deep-interview` maps to `ClarificationKind`. The scheduler structurally
+`cyclus-interview` maps to `ClarificationKind`. The scheduler structurally
 cannot mark a `ClarificationKind` task terminal — there is no
 `should_terminate` overload for it. Only an explicit human `complete()` call
 ends it. This is not a runtime rule or a prose instruction; it is a type
 property that holds across all backends.
 
-**Failure it prevents:** re-architecting deep-interview onto a durable queue
-model with a synthetic done-criterion, violating the fundamental property that
-only the human decides when requirements deliberation is complete.
+**Failure it prevents:** re-architecting `cyclus-interview` onto a durable
+queue model with a synthetic done-criterion, violating the fundamental
+property that only the human decides when requirements deliberation is
+complete.
 
-## P9 — OMH's job is `WorkSpec → DesignedWork`; Saturate's job is execution
+## P9 — Cyclus's job is `WorkSpec → DesignedWork`; Saturate's job is execution
 
-OMH's single responsibility in the arc is the type transformation:
+Cyclus's single responsibility in the arc is the type transformation:
 `WorkSpec → DesignedWork`. A `DesignedWork` carries proof-of-deliberation —
 the goal is verifiable, the loop kind is declared, terminal states are named,
 blast radius is documented. Saturate never needs to know how deliberation
-happened; it needs a conforming typed spec. OMH never needs to know how
+happened; it needs a conforming typed spec. Cyclus never needs to know how
 Saturate executes; it needs to produce the spec correctly.
 
-**Failure it prevents:** OMH reaching into execution concerns (scheduler
+**Failure it prevents:** Cyclus reaching into execution concerns (scheduler
 config, fleet topology, backend selection) or Saturate reaching into
 deliberation concerns (goal verification, blast radius review). Neither
 crosses the line.
 
 ---
 
-*Authored 2026-07-06 for OMH v18 re-grounding. Revised same day after
-loop taxonomy co-design with Saturate.*  
-*Companion docs: `docs/v18/architecture.md`, `docs/v18/analysis.md`*
+*Authored 2026-07-06 for the v18 re-grounding (at the time the project was
+still named OMH; renamed to Cyclus within the same cycle). Revised same day
+after loop taxonomy co-design with Saturate. Rectified 2026-07-11 —
+OMH → Cyclus naming, stale skill names (`ralplan`/`deep-research`/
+`deep-interview` → `cyclus-plan`/`cyclus-research`/`cyclus-interview`),
+`DOCTRINE.md` cross-reference added, stale `docs/v18/` pointers removed
+(that design work now lives in this file and `ARCHITECTURE.md`).*
