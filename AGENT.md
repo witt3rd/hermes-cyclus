@@ -25,7 +25,7 @@ cyclus/       the plugin
     evidence_tool.py  cyclus_evidence Hermes tool handler
   references/         15 role prompts (role-executor.md, role-planner.md, ...)
   skills/             deliberation skill SKILL.md files (cyclus-ralph, cyclus-ralplan, ...)
-  tests/              pytest suite (uv run pytest cyclus/tests/)
+  tests/              pytest suite (uv run pytest tests/)
   templates/          .cyclus/ directory scaffolding
 ```
 
@@ -33,7 +33,7 @@ cyclus/       the plugin
 
 ```bash
 uv sync
-uv run pytest cyclus/tests/ -q   # must pass before any commit
+uv run pytest tests/ -q   # must pass before any commit
 ```
 
 ## Doctrine and Principles

@@ -1,8 +1,8 @@
 # Cyclus Principles
 
 These are the load-bearing constraints for Cyclus design and implementation.
-Each principle names the failure it prevents. Subagents in any ralplan run
-must honor all of them unless explicitly contesting one with principled grounds.
+Each principle names the failure it prevents. Subagents in any consensus-plan
+run must honor all of them unless explicitly contesting one with principled grounds.
 
 These principles descend from `DOCTRINE.md` — read that first. Doctrine says
 what Cyclus is *for*; these principles say what matters when *designing the
@@ -130,7 +130,7 @@ crosses the line.
 ---
 
 *Authored 2026-07-06 for the v18 re-grounding (at the time the project was
-still named OMH; renamed to Cyclus later the same cycle). Revised same day
+still named OMH; renamed to Cyclus within the same cycle). Revised same day
 after loop taxonomy co-design with Saturate. Rectified 2026-07-11 —
 OMH → Cyclus naming, stale skill names (`ralplan`/`deep-research`/
 `deep-interview` → `cyclus-plan`/`cyclus-research`/`cyclus-interview`),

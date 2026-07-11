@@ -309,7 +309,7 @@ Files owned: `continuum/goals/minicpm-recall-signal.yaml`
 Acceptance criteria:
 1. Schema validation: `python3 -c "from loop_spec import load_spec; s = load_spec('continuum/goals/minicpm-recall-signal.yaml'); assert s.kind == 'MetricOptimizationKind'; assert s.level == 'L1', f'expected L1, got {s.level}'; assert s.executor is not None; assert 'train_recall_signal.py' not in s.evaluate; assert s.terminal is not None; assert s.terminal.max_iterations == 200; assert s.terminal.plateau_count == 15; assert s.terminal.target_score == 0.85; print('PASS')"`
 2. Terminal block is explicit (non-default): `python3 -c "import yaml; d = yaml.safe_load(open('continuum/goals/minicpm-recall-signal.yaml')); assert 'terminal' in d, 'terminal block missing'; t = d['terminal']; assert t.get('max_iterations') == 200; assert t.get('plateau_count') == 15; assert t.get('target_score') == 0.85; print('terminal block PASS')"`
-3. Level is L1: `python3 -c "import yaml; d = yaml.safe_load(open('continuum/goals/minicpm-recall-signal.yaml')); assert d.get('level') == 'L1', f"expected L1 got {d.get('level')}"; print('level L1 PASS')"`
+3. Level is L1: `python3 -c 'import yaml; d = yaml.safe_load(open("continuum/goals/minicpm-recall-signal.yaml")); assert d.get("level") == "L1", f"expected L1 got {d.get("level")}"; print("level L1 PASS")'`
 
 Dependencies: none
 Estimated budget: 300s

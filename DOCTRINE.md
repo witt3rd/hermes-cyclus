@@ -58,8 +58,7 @@ proven is optimizing against an unverified signal — the failure mode is
 not "the loop is slow to trust," it is "the loop confidently does the
 wrong thing at scale before anyone notices." Trust is a property earned by
 the specific loop instance on the specific task, not a global setting
-granted once and forgotten. See `cyclus-loop-design-pitfalls` P-JUDGMENT-FLAG
-and P-TIMEOUT for lived instances of this doctrine under pressure.
+granted once and forgotten.
 
 ## Article IV — The mechanism belongs to the platform; the discipline belongs to Cyclus
 
@@ -117,7 +116,7 @@ forbid" — never "what do I want this loop to be allowed to do."
 
 ## Article VII — Backend is configuration; loop kind is identity
 
-The execution substrate a loop runs on — an in-memory file-based queue, a
+The execution substrate a loop runs on — Cyclus's own file-based queue, a
 Kanban board, a distributed Saturate fleet — is detected at runtime and is
 invisible to the skill prose that authors the loop's discipline
 (`PRINCIPLES.md` P5). A skill that hardcodes assumptions about which
