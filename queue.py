@@ -212,7 +212,17 @@ def claim(
 
     # Active: running or stale
     if active.exists():
-        data = _read_json(active)
+        # _write_json is not atomic (truncate-then-write) — a concurrent
+        # winner of the pending->active rename may still be mid-write here.
+        # Treat a transient unreadable file the same as "freshly claimed by
+        # someone else": back off with status="running", don't propagate
+        # the read error. UnicodeDecodeError included because read_text()
+        # can fail on content truncated mid-multibyte-char, not just on
+        # incomplete/invalid JSON. See issue #31.
+        try:
+            data = _read_json(active)
+        except (FileNotFoundError, UnicodeDecodeError, json.JSONDecodeError):
+            return ClaimResult(status="running", item=None)
         last_hb = data.get("last_heartbeat")
         stale = True
         if last_hb:
@@ -238,7 +248,7 @@ def claim(
         # Rename pending→active atomically; if it fails, another worker won.
         try:
             data = _read_json(pending)
-        except (FileNotFoundError, json.JSONDecodeError):
+        except (FileNotFoundError, UnicodeDecodeError, json.JSONDecodeError):
             return ClaimResult(status="not_found", item=None)
         data["status"] = "RUNNING"
         data["last_heartbeat"] = now
