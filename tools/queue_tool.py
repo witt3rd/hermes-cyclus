@@ -240,101 +240,178 @@ def _validate_terminal(terminal: Any) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Kanban backend — delegates to kanban_* toolset via Hermes context
+# Kanban backend — dispatches via registry.dispatch() to real kanban_* tools
 # ---------------------------------------------------------------------------
 
-def _kanban_action(action: str, args: dict, kanban_ctx) -> str:
-    """Route cyclus_queue actions to the Kanban backend via kanban_* tools."""
+def _kb(tool_name: str, tool_args: dict) -> dict:
+    """Call a kanban_* tool through the real Hermes registry.
+
+    Returns the parsed JSON dict.  Raises RuntimeError if the registry is
+    unavailable (e.g. unit-test isolation without hermes-agent on the path).
+    """
+    try:
+        import sys
+        import pathlib
+        # hermes-agent may not be on sys.path in every test environment.
+        _agent_root = str(pathlib.Path.home() / ".hermes" / "hermes-agent")
+        if _agent_root not in sys.path:
+            sys.path.insert(0, _agent_root)
+        from tools.registry import registry
+    except ImportError as exc:
+        raise RuntimeError(f"kanban backend unavailable: {exc}") from exc
+    raw = registry.dispatch(tool_name, tool_args)
+    return json.loads(raw) if isinstance(raw, str) else (raw or {})
+
+
+def _kanban_action(action: str, args: dict) -> str:
+    """Route cyclus_queue actions to the Kanban backend via registry.dispatch().
+
+    Two operating modes:
+      Worker    — HERMES_KANBAN_TASK is set; all lifecycle actions operate on
+                  the current task.
+      Interactive — CYCLUS_BACKEND=kanban, no HERMES_KANBAN_TASK; only post/
+                  dispatch create a new task, everything else requires the task
+                  to already exist (pass task_id explicitly via instance_id or
+                  call post first).
+    """
     task_id = os.environ.get("HERMES_KANBAN_TASK", "")
     mode = args.get("mode", "")
     instance_id = args.get("instance_id", "")
+    is_worker = bool(task_id)
 
-    match action:
-        case "status":
-            result = kanban_ctx.kanban_show({"task_id": task_id})
-            data = json.loads(result) if isinstance(result, str) else result
-            return json.dumps({
-                "found": True,
-                "task_id": task_id,
-                "status": data.get("status", "unknown"),
-                "kind": args.get("kind"),
-                "instance_id": instance_id,
-            })
+    try:
+        match action:
+            case "post":
+                if is_worker:
+                    # Worker — task already exists, post() is a no-op.
+                    return json.dumps({"task_id": task_id,
+                                       "note": "kanban: task already exists (worker)"})
+                # Interactive — create a new Kanban task via kanban_create.
+                assignee = args.get("assignee", "forge")
+                name = args.get("name") or instance_id
+                body_lines = [
+                    f"**mode:** {mode}",
+                    f"**instance_id:** {instance_id}",
+                ]
+                if args.get("kind"):
+                    body_lines.append(f"**kind:** {args['kind']}")
+                body_lines.append("")
+                body_lines.append(
+                    "Posted via `cyclus_queue action=post` (interactive Kanban mode)."
+                )
+                create_args: dict = {
+                    "title": name,
+                    "assignee": assignee,
+                    "body": "\n".join(body_lines),
+                }
+                if args.get("tags"):
+                    create_args["tags"] = args["tags"]
+                if args.get("spawned_by"):
+                    create_args["parents"] = [args["spawned_by"]]
+                elif args.get("depends_on"):
+                    create_args["parents"] = args["depends_on"]
+                if args.get("max_turns"):
+                    create_args["goal_max_turns"] = int(args["max_turns"])
+                data = _kb("kanban_create", create_args)
+                new_id = data.get("task_id") or data.get("id", "")
+                return json.dumps({"task_id": new_id})
 
-        case "write_state":
-            state = args.get("state")
-            err = _validate_state(state)
-            if err:
-                return json.dumps({"error": err})
-            assert isinstance(state, dict)  # narrowed by _validate_state
-            # Redact to allowlist, truncate to avoid leaks / size limits
-            redacted = _redact_state(state)
-            payload = json.dumps(redacted, indent=2)
-            if len(payload) > _KANBAN_STATE_COMMENT_MAX:
-                payload = payload[:_KANBAN_STATE_COMMENT_MAX] + "\n… (truncated)"
-            kanban_ctx.kanban_heartbeat({"task_id": task_id})
-            kanban_ctx.kanban_comment({
-                "task_id": task_id,
-                "body": f"**state**\n```json\n{payload}\n```",
-            })
-            return json.dumps({"ok": True})
+            case "dispatch":
+                if is_worker:
+                    return json.dumps({
+                        "dispatched": True,
+                        "task_id": task_id,
+                        "mode": mode,
+                        "instance_id": instance_id,
+                        "note": "kanban: gateway dispatches automatically",
+                    })
+                # Interactive dispatch — same as post (create the task).
+                return _kanban_action("post", args)
 
-        case "complete":
-            terminal = args.get("terminal_state")
-            err = _validate_terminal(terminal)
-            if err:
-                return json.dumps({"error": err})
-            assert isinstance(terminal, str)  # narrowed by _validate_terminal
-            output = args.get("output") or {}
-            summary = output.get("summary", terminal)
-            kanban_ctx.kanban_complete({
-                "task_id": task_id,
-                "summary": summary,
-                "metadata": output,
-            })
-            return json.dumps({"ok": True})
+            case "status":
+                if not task_id:
+                    return json.dumps({"found": False,
+                                       "error": "no HERMES_KANBAN_TASK set"})
+                data = _kb("kanban_show", {"task_id": task_id})
+                return json.dumps({
+                    "found": True,
+                    "task_id": task_id,
+                    "status": data.get("status", "unknown"),
+                    "kind": args.get("kind"),
+                    "instance_id": instance_id,
+                })
 
-        case "post":
-            # In Kanban mode the task already exists — post() is a no-op.
-            return json.dumps({"task_id": task_id, "note": "kanban: task already exists"})
+            case "write_state":
+                if not task_id:
+                    return json.dumps({"error": "write_state requires HERMES_KANBAN_TASK"})
+                state = args.get("state")
+                err = _validate_state(state)
+                if err:
+                    return json.dumps({"error": err})
+                assert isinstance(state, dict)  # narrowed by _validate_state
+                redacted = _redact_state(state)
+                payload = json.dumps(redacted, indent=2)
+                if len(payload) > _KANBAN_STATE_COMMENT_MAX:
+                    payload = payload[:_KANBAN_STATE_COMMENT_MAX] + "\n… (truncated)"
+                _kb("kanban_heartbeat", {"task_id": task_id})
+                _kb("kanban_comment", {
+                    "task_id": task_id,
+                    "body": f"**state**\n```json\n{payload}\n```",
+                })
+                return json.dumps({"ok": True})
 
-        case "claim":
-            # Already claimed by the Kanban dispatcher.
-            kanban_ctx.kanban_heartbeat({"task_id": task_id})
-            return json.dumps({
-                "status": "claimed",
-                "item": {"task_id": task_id, "mode": mode, "instance_id": instance_id},
-            })
+            case "complete":
+                if not task_id:
+                    return json.dumps({"error": "complete requires HERMES_KANBAN_TASK"})
+                terminal = args.get("terminal_state")
+                err = _validate_terminal(terminal)
+                if err:
+                    return json.dumps({"error": err})
+                assert isinstance(terminal, str)  # narrowed by _validate_terminal
+                output = args.get("output") or {}
+                summary = output.get("summary", terminal)
+                _kb("kanban_complete", {
+                    "task_id": task_id,
+                    "summary": summary,
+                    "metadata": output,
+                    "terminal_state": terminal,
+                })
+                return json.dumps({"ok": True})
 
-        case "release":
-            kanban_ctx.kanban_block({
-                "task_id": task_id,
-                "reason": "dependency",
-                "message": "Worker releasing task back to dispatcher",
-            })
-            return json.dumps({"ok": True})
+            case "claim":
+                if not task_id:
+                    return json.dumps({"error": "claim requires HERMES_KANBAN_TASK"})
+                _kb("kanban_heartbeat", {"task_id": task_id})
+                return json.dumps({
+                    "status": "claimed",
+                    "item": {"task_id": task_id, "mode": mode, "instance_id": instance_id},
+                })
 
-        case "cancel":
-            kanban_ctx.kanban_block({
-                "task_id": task_id,
-                "reason": "dependency",
-                "message": args.get("reason", "cancelled"),
-            })
-            return json.dumps({"ok": True})
+            case "release":
+                if not task_id:
+                    return json.dumps({"error": "release requires HERMES_KANBAN_TASK"})
+                _kb("kanban_block", {
+                    "task_id": task_id,
+                    "kind": "dependency",
+                    "reason": "Worker releasing task back to dispatcher",
+                })
+                return json.dumps({"ok": True})
 
-        case "dispatch":
-            # In Kanban mode, dispatch is equivalent to post (no-op) — the
-            # gateway handles dispatch automatically after task creation.
-            return json.dumps({
-                "dispatched": True,
-                "task_id": task_id,
-                "mode": mode,
-                "instance_id": instance_id,
-                "note": "kanban: gateway dispatches automatically",
-            })
+            case "cancel":
+                if not task_id:
+                    return json.dumps({"error": "cancel requires HERMES_KANBAN_TASK"})
+                _kb("kanban_block", {
+                    "task_id": task_id,
+                    "kind": "needs_input",
+                    "reason": args.get("reason", "cancelled"),
+                })
+                return json.dumps({"ok": True})
 
-        case _:
-            return json.dumps({"error": f"Kanban backend: unsupported action {action!r}"})
+            case _:
+                return json.dumps({"error": f"Kanban backend: unsupported action {action!r}"})
+
+    except RuntimeError as exc:
+        return json.dumps({"error": str(exc)})
 
 
 # ---------------------------------------------------------------------------
@@ -511,6 +588,13 @@ CYCLUS_QUEUE_SCHEMA = {
                 "items": {"type": "string"},
                 "description": "task_ids that must complete first (action=post only).",
             },
+            "assignee": {
+                "type": "string",
+                "description": (
+                    "Assignee profile name for kanban post (action=post only, Kanban "
+                    "interactive mode). Defaults to 'forge' if omitted."
+                ),
+            },
             "heartbeat_timeout_seconds": {
                 "type": "integer",
                 "description": "Reclaim window in seconds (action=claim only; default 300).",
@@ -562,18 +646,7 @@ def cyclus_queue_handler(args: dict, **kwargs) -> str:
 
     try:
         if backend == "kanban":
-            kanban_ctx = kwargs.get("ctx") or kwargs.get("kanban_ctx")
-            if kanban_ctx is None:
-                # No ctx available — error rather than silently side-effecting
-                # the file queue from inside a Kanban worker session.
-                return json.dumps({
-                    "error": (
-                        "HERMES_KANBAN_TASK is set but no Kanban context (ctx) was passed. "
-                        "Refusing to fall back to file backend to avoid diverging from the "
-                        "Kanban dispatcher's source of truth."
-                    )
-                })
-            return _kanban_action(action, args, kanban_ctx)
+            return _kanban_action(action, args)
 
         elif backend == "saturate":
             return _saturate_action(action, args)
