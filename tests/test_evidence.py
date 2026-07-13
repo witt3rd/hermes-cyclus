@@ -237,8 +237,8 @@ def test_file_not_found_error():
 # ---------------------------------------------------------------------------
 
 def test_empty_prefix_in_allowlist_is_skipped(monkeypatch):
-    cyclus_config_module._config_cache["evidence"]["allowlist_prefixes"] = ["", "python3 -m pytest"]
-    result = json.loads(cyclus_evidence_handler({"commands": ["python3 -m pytest ."]}))
+    cyclus_config_module._config_cache["evidence"]["allowlist_prefixes"] = ["", "true"]
+    result = json.loads(cyclus_evidence_handler({"commands": ["true"]}))
     # The empty prefix must not cause a match by itself; the real prefix should match
     assert "error" not in result
     assert len(result["results"]) == 1
