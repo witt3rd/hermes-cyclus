@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import os
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -195,6 +195,25 @@ def test_interactive_post_creates_task(interactive_env):
     assert tool_args["assignee"] == "forge"
     assert tool_args["title"] == "My Loop"
 
+
+def test_interactive_post_propagates_kanban_create_error(interactive_env):
+    kb = _kb_factory(kanban_create={"error": "assignee profile not found"})
+    with patch("cyclus.tools.queue_tool._kb", kb):
+        result = json.loads(cyclus_queue_handler(
+            {"action": "post", "mode": "loop", "instance_id": "x", "assignee": "forge"}
+        ))
+    assert "error" in result
+    assert "kanban_create failed" in result["error"]
+
+
+def test_interactive_post_errors_on_empty_task_id(interactive_env):
+    kb = _kb_factory(kanban_create={})  # no task_id or id key
+    with patch("cyclus.tools.queue_tool._kb", kb):
+        result = json.loads(cyclus_queue_handler(
+            {"action": "post", "mode": "loop", "instance_id": "x", "assignee": "forge"}
+        ))
+    assert "error" in result
+    assert "no task_id" in result["error"]
 
 def test_interactive_post_defaults_assignee_to_forge(interactive_env):
     kb = _kb_factory(kanban_create={"task_id": "t_xyz"})

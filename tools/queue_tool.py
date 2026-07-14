@@ -267,12 +267,12 @@ def _kanban_action(action: str, args: dict) -> str:
     """Route cyclus_queue actions to the Kanban backend via registry.dispatch().
 
     Two operating modes:
-      Worker    — HERMES_KANBAN_TASK is set; all lifecycle actions operate on
-                  the current task.
+      Worker      — HERMES_KANBAN_TASK is set; all lifecycle actions operate on
+                    the current task.
       Interactive — CYCLUS_BACKEND=kanban, no HERMES_KANBAN_TASK; only post/
-                  dispatch create a new task, everything else requires the task
-                  to already exist (pass task_id explicitly via instance_id or
-                  call post first).
+                    dispatch are valid (they create a new task via kanban_create).
+                    All other actions require HERMES_KANBAN_TASK and return an
+                    error if it is absent.
     """
     task_id = os.environ.get("HERMES_KANBAN_TASK", "")
     mode = args.get("mode", "")
@@ -313,7 +313,11 @@ def _kanban_action(action: str, args: dict) -> str:
                 if args.get("max_turns"):
                     create_args["goal_max_turns"] = int(args["max_turns"])
                 data = _kb("kanban_create", create_args)
+                if "error" in data:
+                    return json.dumps({"error": f"kanban_create failed: {data['error']}"})
                 new_id = data.get("task_id") or data.get("id", "")
+                if not new_id:
+                    return json.dumps({"error": "kanban_create returned no task_id"})
                 return json.dumps({"task_id": new_id})
 
             case "dispatch":
