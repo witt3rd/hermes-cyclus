@@ -38,6 +38,7 @@ def queue_env(tmp_path, monkeypatch):
     monkeypatch.delenv("HERMES_KANBAN_TASK", raising=False)
     monkeypatch.delenv("SATURATE_TASK_ID", raising=False)
     monkeypatch.delenv("SATURATE_TASK", raising=False)
+    monkeypatch.delenv("CYCLUS_BACKEND", raising=False)
     cyclus_config_module._config_cache = {
         "project_root": str(tmp_path),
         "omh_backend": "files",
