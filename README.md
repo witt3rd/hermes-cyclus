@@ -73,21 +73,45 @@ is for; principles name what matters when designing the system that does it.
 | `cyclus-plan` | `ConsensusKind` | Run one adversarial deliberation round |
 | `cyclus-research` | `InformationSeekingKind` | Search, gap-check, advance toward sufficiency |
 | `cyclus-interview` | `ClarificationKind` *(HUMAN_GATED)* | Elicit requirements; only human confirms done |
-| `cyclus-triage` | `BatchKind` | Fan-out Maintainer + Skeptic passes on an issue backlog |
+| `cyclus-triage` | — | Fan-out Maintainer + Skeptic passes on an issue backlog |
+| `cyclus-loop-design` | `ConsensusKind` | Planner + Architect + Critic + DRI consensus on a loop spec |
+
+**`cyclus-loop-design` is the upstream gate.** Before dispatching a loop for
+anything non-trivial, run Loop-Driven Development's SPECIFY/DECOMPOSE steps
+through `cyclus-loop-design`. It runs a bounded (≤3 round) consensus loop and
+writes two artifacts into `.cyclus/plans/`:
+
+- `{slug}-spec.yaml` — the validated `LoopSpec` (kind, terminal states, eval
+  command, maturity level)
+- `{slug}-plan.md` — the ralph-shaped task list `cyclus-loop` executes
+
+See [`docs/ldd.md`](docs/ldd.md) for the full six-step cycle this feeds into.
 
 ## Queue backends
 
-Cyclus detects the execution backend at runtime — no code changes when you scale up:
+Cyclus detects the execution backend at runtime from environment variables —
+no code changes when you scale up:
 
 ```
-File-based  (always available, NFS-safe, zero config)  →  atomic dir ops: pending/ active/ done/
-            (if omh_backend = "kanban")                →  Hermes Kanban board (visual surface)
-            (if SATURATE_URL is set)                   →  Saturate distributed fleet
+File-based  (default, NFS-safe, zero config)                →  atomic dir ops: pending/ active/ done/
+            HERMES_KANBAN_TASK is set                        →  Hermes Kanban board (visual surface)
+            SATURATE_TASK_ID / SATURATE_TASK is set          →  Saturate distributed fleet
+            CYCLUS_BACKEND=file|kanban|saturate (explicit)   →  overrides autodetection
 ```
 
 **Why not SQLite?** SQLite WAL mode corrupts on NFS — the reason Hermes users
 on Azure Files or shared mounts disable Kanban. Cyclus Tier 1 uses atomic
 `os.rename()` instead: POSIX-guaranteed NFS-safe, zero dependencies.
+
+**Filesystem vs Kanban.** The file backend is the safe default: zero config,
+works everywhere Hermes runs, and is what you get unless a Kanban- or
+Saturate-injected env var is present. Kanban gives you a visual board but
+adds sharp edges worth knowing before you rely on it — e.g. `depends_on`
+between tasks doesn't auto-wire the parent relationship the way you might
+expect, and cron-triggered sessions can't consume `delegate_task` results in
+real time. See [`docs/anti-patterns.md`](docs/anti-patterns.md) and the
+Pitfalls section of [`skills/cyclus-loop/SKILL.md`](skills/cyclus-loop/SKILL.md)
+before choosing Kanban for anything you're not prepared to debug.
 
 ## Queue interface
 
@@ -125,10 +149,11 @@ ln -s /path/to/cyclus ~/.hermes/profiles/forge/plugins/cyclus
 
 ## Architecture
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design: the loop taxonomy,
-typed FP-style interfaces, the Hermes-native loop patterns (`--context-from`
-chaining, `STATE.md` as loop spine), and the forward arc toward distributed
-execution via [Saturate](https://github.com/witt3rd/saturate).
+See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design: the loop
+taxonomy, typed FP-style interfaces, and the forward arc toward distributed
+execution via [Saturate](https://github.com/witt3rd/saturate). For the
+Hermes-native loop patterns (`hermes cron --context-from` chaining,
+`STATE.md` as loop spine), see [`docs/tutorial.md`](docs/tutorial.md).
 
 ---
 
