@@ -28,7 +28,6 @@ def queue_env(tmp_path, monkeypatch):
     monkeypatch.delenv("CYCLUS_BACKEND", raising=False)
     cyclus_config_module._config_cache = {
         "project_root": str(tmp_path),
-        "omh_backend": "files",
     }
     yield tmp_path
     cyclus_config_module._config_cache = None

@@ -50,7 +50,6 @@ def queue_env(tmp_path, monkeypatch):
     """
     cyclus_config_module._config_cache = {
         "project_root": str(tmp_path),
-        "omh_backend": "files",
     }
     yield tmp_path
     cyclus_config_module._config_cache = None
@@ -431,7 +430,6 @@ def test_file_queue_claim_is_atomic_under_repeated_stress(queue_env):
         # over queue_env's None reset, leaking config into later tests.
         cyclus_config_module._config_cache = {
             "project_root": str(tmp),
-            "omh_backend": "files",
         }
 
         post(mode="loop", instance_id="atomic-stress", kind="TaskExecutionKind", name="Atomic")
